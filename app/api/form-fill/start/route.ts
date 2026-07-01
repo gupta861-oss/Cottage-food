@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
 
   // Reject duplicate active jobs for the same saved_market_id
   if (saved_market_id) {
-    const existingJobs = getFormFillJobsForUser(session.user.id)
+    const existingJobs = await getFormFillJobsForUser(session.user.id)
     const activeStatuses = new Set(['queued', 'navigating', 'extracting', 'mapping', 'filling', 'screenshot_taken', 'awaiting_review', 'submitting'])
     const duplicate = existingJobs.find(j => j.saved_market_id === saved_market_id && activeStatuses.has(j.status))
     if (duplicate) {
@@ -71,7 +71,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const job = createFormFillJob({
+  // The worker relies on a detached, long-lived child process holding a
+  // headless browser session open for up to 10 minutes. Vercel (and other
+  // serverless hosts) tear the function environment down when the request
+  // ends, so a spawned child never survives long enough to do anything.
+  // Fail clearly here rather than silently creating a job that hangs until
+  // the 10-minute stale-job timeout fires.
+  if (process.env.VERCEL) {
+    return NextResponse.json({
+      error: 'Auto-fill isn\'t available on this deployment. It requires a persistent background browser session, which serverless hosting can\'t run. Use the manual apply link for now.',
+    }, { status: 501 })
+  }
+
+  const job = await createFormFillJob({
     user_id: session.user.id,
     producer_profile_id: profile.id,
     target_url,

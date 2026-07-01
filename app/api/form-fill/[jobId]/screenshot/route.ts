@@ -7,7 +7,7 @@ export async function GET(req: NextRequest, { params }: { params: { jobId: strin
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const job = getFormFillJob(params.jobId)
+  const job = await getFormFillJob(params.jobId)
   if (!job) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (job.user_id !== session.user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 

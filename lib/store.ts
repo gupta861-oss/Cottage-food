@@ -6,13 +6,43 @@ import fs from 'fs'
 
 const DATA_DIR = path.join(process.cwd(), '.data')
 
+// ─── Storage backend ────────────────────────────────────────────────────────
+// Local dev / this sandbox: flat JSON files on disk under .data/.
+// Vercel (or anywhere with a Redis-compatible KV attached): Upstash Redis,
+// detected automatically via env vars injected when a store is attached in
+// the Vercel dashboard. Same readFile/writeFile interface either way, so
+// every function below is unaware of which backend is active.
+
+const REDIS_URL = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL
+const REDIS_TOKEN = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN
+
+let redisClient: import('@upstash/redis').Redis | null = null
+function getRedis(): import('@upstash/redis').Redis | null {
+  if (!REDIS_URL || !REDIS_TOKEN) return null
+  if (!redisClient) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Redis } = require('@upstash/redis')
+    redisClient = new Redis({ url: REDIS_URL, token: REDIS_TOKEN })
+  }
+  return redisClient
+}
+
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true })
   }
 }
 
-function readFile<T>(filename: string, defaultValue: T): T {
+async function readFile<T>(filename: string, defaultValue: T): Promise<T> {
+  const redis = getRedis()
+  if (redis) {
+    try {
+      const value = await redis.get<T>(filename)
+      return value ?? defaultValue
+    } catch {
+      return defaultValue
+    }
+  }
   ensureDataDir()
   const filePath = path.join(DATA_DIR, filename)
   try {
@@ -23,7 +53,12 @@ function readFile<T>(filename: string, defaultValue: T): T {
   return defaultValue
 }
 
-function writeFile<T>(filename: string, data: T): void {
+async function writeFile<T>(filename: string, data: T): Promise<void> {
+  const redis = getRedis()
+  if (redis) {
+    await redis.set(filename, data)
+    return
+  }
   ensureDataDir()
   const filePath = path.join(DATA_DIR, filename)
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2))
@@ -32,7 +67,7 @@ function writeFile<T>(filename: string, data: T): void {
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 export async function createUser(email: string, name: string, password: string): Promise<User> {
-  const users = readFile<User[]>('users.json', [])
+  const users = await readFile<User[]>('users.json', [])
   if (users.find(u => u.email === email)) {
     throw new Error('Email already in use')
   }
@@ -47,49 +82,49 @@ export async function createUser(email: string, name: string, password: string):
     updated_at: new Date().toISOString(),
   }
   // store password separately
-  const passwords = readFile<Record<string, string>>('passwords.json', {})
+  const passwords = await readFile<Record<string, string>>('passwords.json', {})
   passwords[user.id] = hashed
-  writeFile('passwords.json', passwords)
+  await writeFile('passwords.json', passwords)
   users.push(user)
-  writeFile('users.json', users)
+  await writeFile('users.json', users)
   return user
 }
 
 export async function findUserByEmail(email: string): Promise<User | null> {
-  const users = readFile<User[]>('users.json', [])
+  const users = await readFile<User[]>('users.json', [])
   return users.find(u => u.email === email) ?? null
 }
 
 export async function findUserById(id: string): Promise<User | null> {
-  const users = readFile<User[]>('users.json', [])
+  const users = await readFile<User[]>('users.json', [])
   return users.find(u => u.id === id) ?? null
 }
 
 export async function verifyPassword(userId: string, password: string): Promise<boolean> {
-  const passwords = readFile<Record<string, string>>('passwords.json', {})
+  const passwords = await readFile<Record<string, string>>('passwords.json', {})
   const hashed = passwords[userId]
   if (!hashed) return false
   return bcrypt.compare(password, hashed)
 }
 
 export async function updateUser(id: string, data: Partial<User>): Promise<User | null> {
-  const users = readFile<User[]>('users.json', [])
+  const users = await readFile<User[]>('users.json', [])
   const idx = users.findIndex(u => u.id === id)
   if (idx === -1) return null
   users[idx] = { ...users[idx], ...data, updated_at: new Date().toISOString() }
-  writeFile('users.json', users)
+  await writeFile('users.json', users)
   return users[idx]
 }
 
 // ─── Producer Profile ──────────────────────────────────────────────────────────
 
 export async function getProducerProfile(userId: string): Promise<ProducerProfile | null> {
-  const profiles = readFile<ProducerProfile[]>('producer-profiles.json', [])
+  const profiles = await readFile<ProducerProfile[]>('producer-profiles.json', [])
   return profiles.find(p => p.user_id === userId) ?? null
 }
 
 export async function createProducerProfile(data: Omit<ProducerProfile, 'id' | 'created_at' | 'updated_at'>): Promise<ProducerProfile> {
-  const profiles = readFile<ProducerProfile[]>('producer-profiles.json', [])
+  const profiles = await readFile<ProducerProfile[]>('producer-profiles.json', [])
   const profile: ProducerProfile = {
     ...data,
     id: generateId(),
@@ -97,33 +132,33 @@ export async function createProducerProfile(data: Omit<ProducerProfile, 'id' | '
     updated_at: new Date().toISOString(),
   }
   profiles.push(profile)
-  writeFile('producer-profiles.json', profiles)
+  await writeFile('producer-profiles.json', profiles)
   return profile
 }
 
 export async function updateProducerProfile(id: string, data: Partial<ProducerProfile>): Promise<ProducerProfile | null> {
-  const profiles = readFile<ProducerProfile[]>('producer-profiles.json', [])
+  const profiles = await readFile<ProducerProfile[]>('producer-profiles.json', [])
   const idx = profiles.findIndex(p => p.id === id)
   if (idx === -1) return null
   profiles[idx] = { ...profiles[idx], ...data, updated_at: new Date().toISOString() }
-  writeFile('producer-profiles.json', profiles)
+  await writeFile('producer-profiles.json', profiles)
   return profiles[idx]
 }
 
 // ─── Products ─────────────────────────────────────────────────────────────────
 
 export async function getProducts(producerProfileId: string): Promise<Product[]> {
-  const products = readFile<Product[]>('products.json', [])
+  const products = await readFile<Product[]>('products.json', [])
   return products.filter(p => p.producer_profile_id === producerProfileId)
 }
 
 export async function getProduct(id: string): Promise<Product | null> {
-  const products = readFile<Product[]>('products.json', [])
+  const products = await readFile<Product[]>('products.json', [])
   return products.find(p => p.id === id) ?? null
 }
 
 export async function createProduct(data: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product> {
-  const products = readFile<Product[]>('products.json', [])
+  const products = await readFile<Product[]>('products.json', [])
   const product: Product = {
     ...data,
     id: generateId(),
@@ -131,40 +166,40 @@ export async function createProduct(data: Omit<Product, 'id' | 'created_at' | 'u
     updated_at: new Date().toISOString(),
   }
   products.push(product)
-  writeFile('products.json', products)
+  await writeFile('products.json', products)
   return product
 }
 
 export async function updateProduct(id: string, data: Partial<Product>): Promise<Product | null> {
-  const products = readFile<Product[]>('products.json', [])
+  const products = await readFile<Product[]>('products.json', [])
   const idx = products.findIndex(p => p.id === id)
   if (idx === -1) return null
   products[idx] = { ...products[idx], ...data, updated_at: new Date().toISOString() }
-  writeFile('products.json', products)
+  await writeFile('products.json', products)
   return products[idx]
 }
 
 export async function deleteProduct(id: string): Promise<boolean> {
-  const products = readFile<Product[]>('products.json', [])
+  const products = await readFile<Product[]>('products.json', [])
   const filtered = products.filter(p => p.id !== id)
   if (filtered.length === products.length) return false
-  writeFile('products.json', filtered)
+  await writeFile('products.json', filtered)
   return true
 }
 
 // ─── Labels ───────────────────────────────────────────────────────────────────
 
 export async function getLabel(productId: string): Promise<Label | null> {
-  const labels = readFile<Label[]>('labels.json', [])
+  const labels = await readFile<Label[]>('labels.json', [])
   return labels.find(l => l.product_id === productId) ?? null
 }
 
 export async function upsertLabel(data: Omit<Label, 'id' | 'created_at' | 'updated_at'> & { id?: string }): Promise<Label> {
-  const labels = readFile<Label[]>('labels.json', [])
+  const labels = await readFile<Label[]>('labels.json', [])
   const existing = labels.findIndex(l => l.product_id === data.product_id)
   if (existing !== -1) {
     labels[existing] = { ...labels[existing], ...data, updated_at: new Date().toISOString() }
-    writeFile('labels.json', labels)
+    await writeFile('labels.json', labels)
     return labels[existing]
   }
   const label: Label = {
@@ -174,19 +209,19 @@ export async function upsertLabel(data: Omit<Label, 'id' | 'created_at' | 'updat
     updated_at: new Date().toISOString(),
   }
   labels.push(label)
-  writeFile('labels.json', labels)
+  await writeFile('labels.json', labels)
   return label
 }
 
 // ─── Documents ────────────────────────────────────────────────────────────────
 
 export async function getDocuments(producerProfileId: string): Promise<Document[]> {
-  const docs = readFile<Document[]>('documents.json', [])
+  const docs = await readFile<Document[]>('documents.json', [])
   return docs.filter(d => d.producer_profile_id === producerProfileId)
 }
 
 export async function createDocument(data: Omit<Document, 'id' | 'created_at' | 'updated_at'>): Promise<Document> {
-  const docs = readFile<Document[]>('documents.json', [])
+  const docs = await readFile<Document[]>('documents.json', [])
   const doc: Document = {
     ...data,
     id: generateId(),
@@ -194,36 +229,36 @@ export async function createDocument(data: Omit<Document, 'id' | 'created_at' | 
     updated_at: new Date().toISOString(),
   }
   docs.push(doc)
-  writeFile('documents.json', docs)
+  await writeFile('documents.json', docs)
   return doc
 }
 
 export async function updateDocument(id: string, data: Partial<Document>): Promise<Document | null> {
-  const docs = readFile<Document[]>('documents.json', [])
+  const docs = await readFile<Document[]>('documents.json', [])
   const idx = docs.findIndex(d => d.id === id)
   if (idx === -1) return null
   docs[idx] = { ...docs[idx], ...data, updated_at: new Date().toISOString() }
-  writeFile('documents.json', docs)
+  await writeFile('documents.json', docs)
   return docs[idx]
 }
 
 export async function deleteDocument(id: string): Promise<boolean> {
-  const docs = readFile<Document[]>('documents.json', [])
+  const docs = await readFile<Document[]>('documents.json', [])
   const filtered = docs.filter(d => d.id !== id)
   if (filtered.length === docs.length) return false
-  writeFile('documents.json', filtered)
+  await writeFile('documents.json', filtered)
   return true
 }
 
 // ─── Checklist ────────────────────────────────────────────────────────────────
 
 export async function getChecklist(producerProfileId: string): Promise<ChecklistItem[]> {
-  const items = readFile<ChecklistItem[]>('checklist.json', [])
+  const items = await readFile<ChecklistItem[]>('checklist.json', [])
   return items.filter(i => i.producer_profile_id === producerProfileId)
 }
 
 export async function createChecklistItem(data: Omit<ChecklistItem, 'id' | 'created_at' | 'updated_at'>): Promise<ChecklistItem> {
-  const items = readFile<ChecklistItem[]>('checklist.json', [])
+  const items = await readFile<ChecklistItem[]>('checklist.json', [])
   const item: ChecklistItem = {
     ...data,
     id: generateId(),
@@ -231,43 +266,43 @@ export async function createChecklistItem(data: Omit<ChecklistItem, 'id' | 'crea
     updated_at: new Date().toISOString(),
   }
   items.push(item)
-  writeFile('checklist.json', items)
+  await writeFile('checklist.json', items)
   return item
 }
 
 export async function updateChecklistItem(id: string, data: Partial<ChecklistItem>): Promise<ChecklistItem | null> {
-  const items = readFile<ChecklistItem[]>('checklist.json', [])
+  const items = await readFile<ChecklistItem[]>('checklist.json', [])
   const idx = items.findIndex(i => i.id === id)
   if (idx === -1) return null
   items[idx] = { ...items[idx], ...data, updated_at: new Date().toISOString() }
-  writeFile('checklist.json', items)
+  await writeFile('checklist.json', items)
   return items[idx]
 }
 
 export async function bulkCreateChecklist(items: Omit<ChecklistItem, 'id' | 'created_at' | 'updated_at'>[]): Promise<ChecklistItem[]> {
-  const existing = readFile<ChecklistItem[]>('checklist.json', [])
+  const existing = await readFile<ChecklistItem[]>('checklist.json', [])
   const created: ChecklistItem[] = items.map(item => ({
     ...item,
     id: generateId(),
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }))
-  writeFile('checklist.json', [...existing, ...created])
+  await writeFile('checklist.json', [...existing, ...created])
   return created
 }
 
 export async function deleteChecklistForProfile(producerProfileId: string): Promise<void> {
-  const items = readFile<ChecklistItem[]>('checklist.json', [])
+  const items = await readFile<ChecklistItem[]>('checklist.json', [])
   const filtered = items.filter(i => i.producer_profile_id !== producerProfileId)
-  writeFile('checklist.json', filtered)
+  await writeFile('checklist.json', filtered)
 }
 
 // ─── Markets ──────────────────────────────────────────────────────────────────
 
 export async function getMarkets(): Promise<Market[]> {
-  const markets = readFile<Market[]>('markets.json', SEED_MARKETS)
+  const markets = await readFile<Market[]>('markets.json', SEED_MARKETS)
   if (markets.length === 0) {
-    writeFile('markets.json', SEED_MARKETS)
+    await writeFile('markets.json', SEED_MARKETS)
     return SEED_MARKETS
   }
   return markets
@@ -287,7 +322,7 @@ export async function createMarket(data: Omit<Market, 'id' | 'created_at' | 'upd
     updated_at: new Date().toISOString(),
   }
   markets.push(market)
-  writeFile('markets.json', markets)
+  await writeFile('markets.json', markets)
   return market
 }
 
@@ -296,7 +331,7 @@ export async function updateMarket(id: string, data: Partial<Market>): Promise<M
   const idx = markets.findIndex(m => m.id === id)
   if (idx === -1) return null
   markets[idx] = { ...markets[idx], ...data, updated_at: new Date().toISOString() }
-  writeFile('markets.json', markets)
+  await writeFile('markets.json', markets)
   return markets[idx]
 }
 
@@ -304,14 +339,14 @@ export async function deleteMarket(id: string): Promise<boolean> {
   const markets = await getMarkets()
   const filtered = markets.filter(m => m.id !== id)
   if (filtered.length === markets.length) return false
-  writeFile('markets.json', filtered)
+  await writeFile('markets.json', filtered)
   return true
 }
 
 // ─── Saved Markets ────────────────────────────────────────────────────────────
 
 export async function getSavedMarkets(producerProfileId: string): Promise<SavedMarket[]> {
-  const saved = readFile<SavedMarket[]>('saved-markets.json', [])
+  const saved = await readFile<SavedMarket[]>('saved-markets.json', [])
   const markets = await getMarkets()
   return saved
     .filter(s => s.producer_profile_id === producerProfileId)
@@ -319,11 +354,11 @@ export async function getSavedMarkets(producerProfileId: string): Promise<SavedM
 }
 
 export async function saveMarket(data: Omit<SavedMarket, 'id' | 'created_at' | 'updated_at'>): Promise<SavedMarket> {
-  const saved = readFile<SavedMarket[]>('saved-markets.json', [])
+  const saved = await readFile<SavedMarket[]>('saved-markets.json', [])
   const existing = saved.findIndex(s => s.producer_profile_id === data.producer_profile_id && s.market_id === data.market_id)
   if (existing !== -1) {
     saved[existing] = { ...saved[existing], ...data, updated_at: new Date().toISOString() }
-    writeFile('saved-markets.json', saved)
+    await writeFile('saved-markets.json', saved)
     return saved[existing]
   }
   const savedMarket: SavedMarket = {
@@ -333,40 +368,40 @@ export async function saveMarket(data: Omit<SavedMarket, 'id' | 'created_at' | '
     updated_at: new Date().toISOString(),
   }
   saved.push(savedMarket)
-  writeFile('saved-markets.json', saved)
+  await writeFile('saved-markets.json', saved)
   return savedMarket
 }
 
 export async function updateSavedMarket(id: string, data: Partial<SavedMarket>): Promise<SavedMarket | null> {
-  const saved = readFile<SavedMarket[]>('saved-markets.json', [])
+  const saved = await readFile<SavedMarket[]>('saved-markets.json', [])
   const idx = saved.findIndex(s => s.id === id)
   if (idx === -1) return null
   saved[idx] = { ...saved[idx], ...data, updated_at: new Date().toISOString() }
-  writeFile('saved-markets.json', saved)
+  await writeFile('saved-markets.json', saved)
   return saved[idx]
 }
 
 export async function removeSavedMarket(id: string): Promise<boolean> {
-  const saved = readFile<SavedMarket[]>('saved-markets.json', [])
+  const saved = await readFile<SavedMarket[]>('saved-markets.json', [])
   const filtered = saved.filter(s => s.id !== id)
   if (filtered.length === saved.length) return false
-  writeFile('saved-markets.json', filtered)
+  await writeFile('saved-markets.json', filtered)
   return true
 }
 
 // ─── Application Packet ───────────────────────────────────────────────────────
 
 export async function getApplicationPacket(producerProfileId: string): Promise<ApplicationPacket | null> {
-  const packets = readFile<ApplicationPacket[]>('application-packets.json', [])
+  const packets = await readFile<ApplicationPacket[]>('application-packets.json', [])
   return packets.find(p => p.producer_profile_id === producerProfileId) ?? null
 }
 
 export async function upsertApplicationPacket(data: Omit<ApplicationPacket, 'id' | 'created_at' | 'updated_at'> & { id?: string }): Promise<ApplicationPacket> {
-  const packets = readFile<ApplicationPacket[]>('application-packets.json', [])
+  const packets = await readFile<ApplicationPacket[]>('application-packets.json', [])
   const existing = packets.findIndex(p => p.producer_profile_id === data.producer_profile_id)
   if (existing !== -1) {
     packets[existing] = { ...packets[existing], ...data, updated_at: new Date().toISOString() }
-    writeFile('application-packets.json', packets)
+    await writeFile('application-packets.json', packets)
     return packets[existing]
   }
   const packet: ApplicationPacket = {
@@ -376,16 +411,16 @@ export async function upsertApplicationPacket(data: Omit<ApplicationPacket, 'id'
     updated_at: new Date().toISOString(),
   }
   packets.push(packet)
-  writeFile('application-packets.json', packets)
+  await writeFile('application-packets.json', packets)
   return packet
 }
 
 // ─── Form-Fill Jobs ───────────────────────────────────────────────────────────
 
-export function createFormFillJob(
+export async function createFormFillJob(
   data: Omit<FormFillJob, 'id' | 'created_at' | 'updated_at'>
-): FormFillJob {
-  const jobs = readFile<FormFillJob[]>('form-fill-jobs.json', [])
+): Promise<FormFillJob> {
+  const jobs = await readFile<FormFillJob[]>('form-fill-jobs.json', [])
   const job: FormFillJob = {
     ...data,
     id: generateId(),
@@ -393,26 +428,26 @@ export function createFormFillJob(
     updated_at: new Date().toISOString(),
   }
   jobs.push(job)
-  writeFile('form-fill-jobs.json', jobs)
+  await writeFile('form-fill-jobs.json', jobs)
   return job
 }
 
-export function getFormFillJob(jobId: string): FormFillJob | null {
-  const jobs = readFile<FormFillJob[]>('form-fill-jobs.json', [])
+export async function getFormFillJob(jobId: string): Promise<FormFillJob | null> {
+  const jobs = await readFile<FormFillJob[]>('form-fill-jobs.json', [])
   return jobs.find(j => j.id === jobId) ?? null
 }
 
-export function updateFormFillJob(jobId: string, updates: Partial<FormFillJob>): FormFillJob | null {
-  const jobs = readFile<FormFillJob[]>('form-fill-jobs.json', [])
+export async function updateFormFillJob(jobId: string, updates: Partial<FormFillJob>): Promise<FormFillJob | null> {
+  const jobs = await readFile<FormFillJob[]>('form-fill-jobs.json', [])
   const idx = jobs.findIndex(j => j.id === jobId)
   if (idx === -1) return null
   jobs[idx] = { ...jobs[idx], ...updates, updated_at: new Date().toISOString() }
-  writeFile('form-fill-jobs.json', jobs)
+  await writeFile('form-fill-jobs.json', jobs)
   return jobs[idx]
 }
 
-export function getFormFillJobsForUser(userId: string): FormFillJob[] {
-  const jobs = readFile<FormFillJob[]>('form-fill-jobs.json', [])
+export async function getFormFillJobsForUser(userId: string): Promise<FormFillJob[]> {
+  const jobs = await readFile<FormFillJob[]>('form-fill-jobs.json', [])
   return jobs.filter(j => j.user_id === userId)
 }
 

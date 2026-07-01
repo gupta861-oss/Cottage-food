@@ -7,7 +7,7 @@ export async function POST(req: NextRequest, { params }: { params: { jobId: stri
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const job = getFormFillJob(params.jobId)
+  const job = await getFormFillJob(params.jobId)
   if (!job) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (job.user_id !== session.user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
@@ -29,19 +29,19 @@ export async function POST(req: NextRequest, { params }: { params: { jobId: stri
       }
       return mf
     })
-    const updated = updateFormFillJob(job.id, { mapped_fields: merged })
+    const updated = await updateFormFillJob(job.id, { mapped_fields: merged })
     return NextResponse.json({ job: updated })
   }
 
   if (action === 'submit') {
     // Signal the waiting worker to proceed with submission
-    updateFormFillJob(job.id, { status: 'submitting', progress_message: 'Submitting form…' })
+    await updateFormFillJob(job.id, { status: 'submitting', progress_message: 'Submitting form…' })
     return NextResponse.json({ ok: true })
   }
 
   if (action === 'open_tab') {
     // User will submit themselves — just mark as applied
-    updateFormFillJob(job.id, {
+    await updateFormFillJob(job.id, {
       status: 'completed',
       submit_result: 'Opened in browser — mark as applied when done.',
     })

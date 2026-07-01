@@ -9,7 +9,7 @@ export async function GET(req: NextRequest, { params }: { params: { jobId: strin
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const job = getFormFillJob(params.jobId)
+  const job = await getFormFillJob(params.jobId)
   if (!job) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (job.user_id !== session.user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest, { params }: { params: { jobId: strin
   if (!TERMINAL_STATUSES.has(job.status)) {
     const age = Date.now() - new Date(job.created_at).getTime()
     if (age > STALE_TIMEOUT_MS) {
-      const updated = updateFormFillJob(job.id, {
+      const updated = await updateFormFillJob(job.id, {
         status: 'error',
         error_message: 'Session timed out — the browser session expired. Please try again.',
       })
@@ -34,11 +34,11 @@ export async function DELETE(req: NextRequest, { params }: { params: { jobId: st
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const job = getFormFillJob(params.jobId)
+  const job = await getFormFillJob(params.jobId)
   if (!job) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (job.user_id !== session.user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const updated = updateFormFillJob(job.id, {
+  const updated = await updateFormFillJob(job.id, {
     status: 'error',
     error_message: 'Cancelled by user.',
   })

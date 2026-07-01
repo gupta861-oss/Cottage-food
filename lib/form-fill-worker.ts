@@ -35,11 +35,11 @@ function getOpenAI(): import('openai').default | null {
 
 // ── Job store helpers ─────────────────────────────────────────────────────────
 
-function updateJob(jobId: string, updates: Partial<FormFillJob>) {
+function updateJob(jobId: string, updates: Partial<FormFillJob>): Promise<FormFillJob | null> {
   return updateFormFillJob(jobId, updates)
 }
 
-function readJob(jobId: string): FormFillJob | null {
+function readJob(jobId: string): Promise<FormFillJob | null> {
   return getFormFillJob(jobId)
 }
 
@@ -477,17 +477,18 @@ async function buildProfileBundle(job: FormFillJob): Promise<ProfileBundle> {
 // ── Main state machine ────────────────────────────────────────────────────────
 
 async function main(jobId: string) {
-  const job = readJob(jobId)
+  const job = await readJob(jobId)
   if (!job) {
     console.error(`[form-fill] Job ${jobId} not found`)
     process.exit(1)
+    return
   }
 
   let browser: Browser | null = null
 
   try {
     // ── navigating ──
-    updateJob(jobId, { status: 'navigating', progress_message: 'Opening form page…' })
+    await updateJob(jobId, { status: 'navigating', progress_message: 'Opening form page…' })
 
     browser = await chromium.launch({
       executablePath: '/opt/pw-browsers/chromium',
@@ -505,7 +506,7 @@ async function main(jobId: string) {
 
     // ── CAPTCHA check early ──
     if (await detectCaptcha(page)) {
-      updateJob(jobId, {
+      await updateJob(jobId, {
         status: 'captcha_required',
         captcha_url: page.url(),
         progress_message: 'CAPTCHA detected — please solve it to continue.',
@@ -515,28 +516,29 @@ async function main(jobId: string) {
       while (waited < 8 * 60 * 1000) {
         await new Promise(r => setTimeout(r, 3000))
         waited += 3000
-        const current = readJob(jobId)
+        const current = await readJob(jobId)
         if (!current || current.status === 'error') break
         // Re-check if CAPTCHA is gone
         if (!(await detectCaptcha(page))) {
           // Continue extraction from where we left off
-          updateJob(jobId, { status: 'extracting', progress_message: 'Reading form fields…' })
+          await updateJob(jobId, { status: 'extracting', progress_message: 'Reading form fields…' })
           break
         }
       }
-      if (readJob(jobId)?.status === 'captcha_required') {
-        updateJob(jobId, { status: 'error', error_message: 'CAPTCHA was not resolved in time.' })
+      const afterCaptcha = await readJob(jobId)
+      if (afterCaptcha?.status === 'captcha_required') {
+        await updateJob(jobId, { status: 'error', error_message: 'CAPTCHA was not resolved in time.' })
         await browser.close()
         return
       }
     }
 
     // ── extracting ──
-    updateJob(jobId, { status: 'extracting', progress_message: 'Reading form fields…' })
+    await updateJob(jobId, { status: 'extracting', progress_message: 'Reading form fields…' })
     const fields = await extractFormFields(page)
 
     if (fields.length === 0) {
-      updateJob(jobId, {
+      await updateJob(jobId, {
         status: 'error',
         error_message: 'No fillable form fields found on this page. The form may require login or have dynamic content.',
       })
@@ -545,13 +547,13 @@ async function main(jobId: string) {
     }
 
     // ── mapping ──
-    updateJob(jobId, { status: 'mapping', progress_message: 'Matching your info to form fields…', fields })
+    await updateJob(jobId, { status: 'mapping', progress_message: 'Matching your info to form fields…', fields })
 
     const bundle = await buildProfileBundle(job)
     const mappedFields = await mapFieldsWithLLM(fields, bundle)
 
     // ── filling ──
-    updateJob(jobId, { status: 'filling', progress_message: 'Filling in your details…', mapped_fields: mappedFields })
+    await updateJob(jobId, { status: 'filling', progress_message: 'Filling in your details…', mapped_fields: mappedFields })
 
     await fillFields(page, mappedFields)
 
@@ -560,24 +562,24 @@ async function main(jobId: string) {
     while (steps < 5 && (await advancePage(page))) {
       steps++
       await new Promise(r => setTimeout(r, 1000))
-      updateJob(jobId, { progress_message: `Filling page ${steps + 1} of form…` })
+      await updateJob(jobId, { progress_message: `Filling page ${steps + 1} of form…` })
       const nextFields = await extractFormFields(page)
       if (nextFields.length > 0) {
         const nextMapped = await mapFieldsWithLLM(nextFields, bundle)
         await fillFields(page, nextMapped)
         // Merge into mapped_fields for review
-        const currentJob = readJob(jobId)
+        const currentJob = await readJob(jobId)
         const allMapped = [...(currentJob?.mapped_fields ?? mappedFields), ...nextMapped]
-        updateJob(jobId, { mapped_fields: allMapped })
+        await updateJob(jobId, { mapped_fields: allMapped })
       }
     }
 
     // ── screenshot_taken ──
-    updateJob(jobId, { status: 'screenshot_taken', progress_message: 'Taking screenshot for review…' })
+    await updateJob(jobId, { status: 'screenshot_taken', progress_message: 'Taking screenshot for review…' })
     const screenshotPath = await takeScreenshot(page, jobId)
 
     // ── awaiting_review ──
-    updateJob(jobId, {
+    await updateJob(jobId, {
       status: 'awaiting_review',
       screenshot_path: screenshotPath,
       progress_message: 'Review the filled form below, then choose how to submit.',
@@ -592,11 +594,11 @@ async function main(jobId: string) {
       await new Promise(r => setTimeout(r, POLL_MS))
       elapsed += POLL_MS
 
-      const current = readJob(jobId)
+      const current = await readJob(jobId)
       if (!current) break
 
       if (current.status === 'submitting') {
-        updateJob(jobId, { progress_message: 'Applying your edits and submitting…' })
+        await updateJob(jobId, { progress_message: 'Applying your edits and submitting…' })
 
         // Re-apply any user edits
         if (current.mapped_fields) {
@@ -625,7 +627,7 @@ async function main(jobId: string) {
         if (submitted) {
           await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
           const confirmText = (await page.textContent('body') ?? '').slice(0, 500)
-          updateJob(jobId, {
+          await updateJob(jobId, {
             status: 'completed',
             submit_result: confirmText || 'Form submitted successfully.',
             progress_message: 'Form submitted!',
@@ -636,7 +638,7 @@ async function main(jobId: string) {
             await updateSavedMarket(current.saved_market_id, { status: 'applied' }).catch(() => {})
           }
         } else {
-          updateJob(jobId, {
+          await updateJob(jobId, {
             status: 'error',
             error_message: 'Could not find submit button. Please submit manually.',
           })
@@ -648,16 +650,16 @@ async function main(jobId: string) {
     }
 
     // If we timed out waiting for user review
-    const finalJob = readJob(jobId)
+    const finalJob = await readJob(jobId)
     if (finalJob?.status === 'awaiting_review') {
-      updateJob(jobId, {
+      await updateJob(jobId, {
         status: 'error',
         error_message: 'Session timed out waiting for user review.',
       })
     }
   } catch (err: any) {
     console.error('[form-fill] Worker error:', err)
-    updateJob(jobId, {
+    await updateJob(jobId, {
       status: 'error',
       error_message: err?.message ?? 'An unexpected error occurred.',
     })
