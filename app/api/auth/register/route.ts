@@ -29,6 +29,11 @@ export async function POST(req: NextRequest) {
     if (err?.message === 'Email already in use') {
       return NextResponse.json({ error: 'Email already in use' }, { status: 409 })
     }
-    return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
+    if (err?.name === 'ZodError') {
+      const firstIssue = err.issues?.[0]?.message ?? 'Invalid input'
+      return NextResponse.json({ error: firstIssue }, { status: 400 })
+    }
+    console.error('Registration error:', err)
+    return NextResponse.json({ error: 'Something went wrong creating your account. Please try again.' }, { status: 500 })
   }
 }
