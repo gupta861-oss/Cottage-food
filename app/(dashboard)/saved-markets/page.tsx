@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Bookmark, MapPin, ExternalLink, Trash2, Calendar } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Bookmark, MapPin, ExternalLink, Trash2, Calendar, Wand2, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -36,6 +37,7 @@ const statusBadge = (status: SavedMarketStatus) => {
 }
 
 export default function SavedMarketsPage() {
+  const router = useRouter()
   const [savedMarkets, setSavedMarkets] = useState<SavedMarket[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -63,6 +65,22 @@ export default function SavedMarketsPage() {
     await fetch(`/api/saved-markets/${id}`, { method: 'DELETE' })
     setSavedMarkets(ms => ms.filter(m => m.id !== id))
     toast({ title: 'Market removed' })
+  }
+
+  const startFormFill = async (sm: SavedMarket): Promise<void> => {
+    const appUrl = sm.market?.application_url
+    if (!appUrl) return
+    const res = await fetch('/api/form-fill/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_url: appUrl, form_type: 'market_application', saved_market_id: sm.id }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      toast({ title: 'Cannot auto-fill', description: data.error ?? 'URL not supported.', variant: 'destructive' })
+      return
+    }
+    router.push(`/form-fill/${data.jobId}`)
   }
 
   if (loading) return <div className="p-8 text-center text-gray-500">Loading…</div>
@@ -120,7 +138,7 @@ export default function SavedMarketsPage() {
               <h2 className="text-lg font-semibold text-gray-900 mb-3">Considering / Ready to apply</h2>
               <div className="space-y-3">
                 {groups.active.map(sm => (
-                  <MarketCard key={sm.id} sm={sm} onUpdateStatus={updateStatus} onRemove={remove} />
+                  <MarketCard key={sm.id} sm={sm} onUpdateStatus={updateStatus} onRemove={remove} onAutoFill={startFormFill} />
                 ))}
               </div>
             </div>
@@ -132,7 +150,7 @@ export default function SavedMarketsPage() {
               <h2 className="text-lg font-semibold text-gray-900 mb-3">Applications in progress</h2>
               <div className="space-y-3">
                 {groups.applied.map(sm => (
-                  <MarketCard key={sm.id} sm={sm} onUpdateStatus={updateStatus} onRemove={remove} />
+                  <MarketCard key={sm.id} sm={sm} onUpdateStatus={updateStatus} onRemove={remove} onAutoFill={startFormFill} />
                 ))}
               </div>
             </div>
@@ -144,7 +162,7 @@ export default function SavedMarketsPage() {
               <h2 className="text-lg font-semibold text-gray-900 mb-3 text-gray-400">Closed / Past</h2>
               <div className="space-y-3 opacity-60">
                 {groups.past.map(sm => (
-                  <MarketCard key={sm.id} sm={sm} onUpdateStatus={updateStatus} onRemove={remove} />
+                  <MarketCard key={sm.id} sm={sm} onUpdateStatus={updateStatus} onRemove={remove} onAutoFill={startFormFill} />
                 ))}
               </div>
             </div>
@@ -156,12 +174,14 @@ export default function SavedMarketsPage() {
 }
 
 function MarketCard({
-  sm, onUpdateStatus, onRemove
+  sm, onUpdateStatus, onRemove, onAutoFill
 }: {
   sm: SavedMarket
   onUpdateStatus: (id: string, status: SavedMarketStatus) => void
   onRemove: (id: string) => void
+  onAutoFill: (sm: SavedMarket) => Promise<void>
 }) {
+  const [filling, setFilling] = useState(false)
   const market = sm.market
   const now = new Date()
   const deadlinePassed = market?.application_close_date && new Date(market.application_close_date) < now
@@ -204,16 +224,30 @@ function MarketCard({
               </p>
             )}
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               {market?.application_url && (
-                <a
-                  href={market.application_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline"
-                >
-                  Apply now <ExternalLink className="w-3 h-3" />
-                </a>
+                <>
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs gap-1.5"
+                    disabled={filling}
+                    onClick={async () => {
+                      setFilling(true)
+                      await onAutoFill(sm).finally(() => setFilling(false))
+                    }}
+                  >
+                    {filling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                    Auto-fill application
+                  </Button>
+                  <a
+                    href={market.application_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-gray-500 hover:underline"
+                  >
+                    Apply manually <ExternalLink className="w-3 h-3" />
+                  </a>
+                </>
               )}
               {market?.website_url && (
                 <a

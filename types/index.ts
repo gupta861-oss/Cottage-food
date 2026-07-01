@@ -234,3 +234,60 @@ export interface OnboardingData {
     social_links?: string[]
   }
 }
+
+// ─── Form-Fill Agent ──────────────────────────────────────────────────────────
+
+export type FormFillJobStatus =
+  | 'queued'
+  | 'navigating'
+  | 'extracting'
+  | 'mapping'
+  | 'filling'
+  | 'screenshot_taken'
+  | 'awaiting_review'
+  | 'submitting'
+  | 'completed'
+  | 'captcha_required'
+  | 'payment_required'
+  | 'error'
+
+export type FieldConfidence = 'high' | 'medium' | 'low'
+
+export interface FormField {
+  selector: string
+  label: string
+  type: string // text | textarea | select | radio | checkbox | email | tel | file
+  required: boolean
+  options?: string[]
+  placeholder?: string
+}
+
+export interface MappedField {
+  field: FormField
+  value: string
+  confidence: FieldConfidence
+  source: string // e.g. 'profile.business_name', 'packet.vendor_bio'
+  skipped?: boolean
+  warning?: string
+  edited?: boolean
+}
+
+export interface FormFillJob {
+  id: string
+  user_id: string
+  producer_profile_id: string
+  target_url: string
+  form_type: 'market_application' | 'cottage_food_registration' | 'dba_registration'
+  saved_market_id?: string
+  checklist_item_id?: string
+  status: FormFillJobStatus
+  progress_message: string
+  fields?: FormField[]
+  mapped_fields?: MappedField[]
+  screenshot_path?: string
+  captcha_url?: string
+  error_message?: string
+  submit_result?: string
+  created_at: string
+  updated_at: string
+}

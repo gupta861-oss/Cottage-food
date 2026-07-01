@@ -4,7 +4,7 @@ const nextConfig = {
     domains: ['localhost'],
   },
   experimental: {
-    serverComponentsExternalPackages: [],
+    serverComponentsExternalPackages: ['playwright', 'playwright-core'],
   },
 }
 

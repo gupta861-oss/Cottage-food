@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/components/ui/use-toast'
-import { Product, Label as LabelType } from '@/types'
+import { Product, Label as LabelType, ProducerProfile } from '@/types'
 import { PRODUCT_CATEGORY_LABELS } from '@/lib/utils'
 
 const MN_REQUIRED_STATEMENT = 'Made in a home kitchen that has not been inspected by the Minnesota Department of Agriculture.'
@@ -19,6 +19,7 @@ const MN_REQUIRED_STATEMENT = 'Made in a home kitchen that has not been inspecte
 export default function LabelsPage() {
   const searchParams = useSearchParams()
   const [products, setProducts] = useState<Product[]>([])
+  const [profile, setProfile] = useState<ProducerProfile | null>(null)
   const [selectedProductId, setSelectedProductId] = useState('')
   const [label, setLabel] = useState<Partial<LabelType>>({})
   const [missing, setMissing] = useState<string[]>([])
@@ -26,11 +27,15 @@ export default function LabelsPage() {
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    fetch('/api/products').then(r => r.json()).then(({ products }) => {
-      setProducts(products ?? [])
+    Promise.all([
+      fetch('/api/products').then(r => r.json()),
+      fetch('/api/producer-profile').then(r => r.json()),
+    ]).then(([pd, pr]) => {
+      setProducts(pd.products ?? [])
+      setProfile(pr.profile ?? null)
       const preselect = searchParams.get('product')
       if (preselect) setSelectedProductId(preselect)
-      else if (products?.[0]) setSelectedProductId(products[0].id)
+      else if (pd.products?.[0]) setSelectedProductId(pd.products[0].id)
     })
   }, [])
 
@@ -58,10 +63,16 @@ export default function LabelsPage() {
             allergens: product?.allergens || [],
             required_statement: MN_REQUIRED_STATEMENT,
             status: 'draft',
+            business_name_or_registrant: profile
+              ? (profile.business_name || profile.owner_name)
+              : '',
+            registration_number_or_address: profile
+              ? `${profile.city}, ${profile.state}`
+              : '',
           })
         }
       })
-  }, [selectedProductId, products])
+  }, [selectedProductId, products, profile])
 
   useEffect(() => {
     const m: string[] = []

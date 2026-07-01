@@ -1,13 +1,21 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { CheckSquare, RefreshCw, ExternalLink, AlertCircle } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { CheckSquare, RefreshCw, ExternalLink, AlertCircle, Wand2, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { toast } from '@/components/ui/use-toast'
 import { ChecklistItem, ChecklistStatus } from '@/types'
 import { CHECKLIST_CATEGORY_LABELS, cn } from '@/lib/utils'
+
+const AUTO_REGISTER_DOMAINS = ['mda.state.mn.us', 'sos.state.mn.us']
+
+function isAutoRegisterable(url?: string): boolean {
+  if (!url) return false
+  try { return AUTO_REGISTER_DOMAINS.some(d => new URL(url).hostname.includes(d)) } catch { return false }
+}
 
 const STATUS_OPTIONS: { value: ChecklistStatus; label: string; color: string }[] = [
   { value: 'not_started', label: 'Not started', color: 'text-gray-500 bg-gray-50 border-gray-200' },
@@ -28,9 +36,35 @@ const CATEGORY_TABS = [
 ]
 
 export default function ChecklistPage() {
+  const router = useRouter()
   const [items, setItems] = useState<ChecklistItem[]>([])
   const [loading, setLoading] = useState(true)
   const [regenerating, setRegenerating] = useState(false)
+  const [fillingId, setFillingId] = useState<string | null>(null)
+
+  const startAutoRegister = async (item: ChecklistItem) => {
+    if (!item.external_url) return
+    setFillingId(item.id)
+    try {
+      const res = await fetch('/api/form-fill/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_url: item.external_url,
+          form_type: 'cottage_food_registration',
+          checklist_item_id: item.id,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast({ title: 'Cannot auto-fill', description: data.error ?? 'URL not supported.', variant: 'destructive' })
+        return
+      }
+      router.push(`/form-fill/${data.jobId}`)
+    } finally {
+      setFillingId(null)
+    }
+  }
 
   const load = async () => {
     const res = await fetch('/api/checklist')
@@ -178,14 +212,30 @@ export default function ChecklistPage() {
                           <p className="text-xs text-gray-400 italic">Why this matters: {item.reason}</p>
                         )}
                         {item.external_url && (
-                          <a
-                            href={item.external_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-primary mt-1 hover:underline"
-                          >
-                            Learn more <ExternalLink className="w-3 h-3" />
-                          </a>
+                          <div className="flex items-center gap-3 mt-1 flex-wrap">
+                            {isAutoRegisterable(item.external_url) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-xs gap-1 px-2"
+                                disabled={fillingId === item.id}
+                                onClick={() => startAutoRegister(item)}
+                              >
+                                {fillingId === item.id
+                                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                                  : <Wand2 className="w-3 h-3" />}
+                                Auto-register
+                              </Button>
+                            )}
+                            <a
+                              href={item.external_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                            >
+                              Learn more <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
                         )}
                       </div>
                       <div className="shrink-0">

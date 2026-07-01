@@ -190,6 +190,32 @@ export default function OnboardingPage() {
       }
 
       await fetch('/api/checklist', { method: 'POST' })
+
+      // Auto-save top 3 state-matched, category-matched markets
+      try {
+        const mktRes = await fetch(`/api/markets?state=${extracted.state ?? ''}`)
+        const { markets } = await mktRes.json()
+        const productCategories = (extracted.products ?? []).map(p => p.category)
+        const now = new Date()
+        const scored = (markets ?? []).map((m: any) => ({
+          market: m,
+          score:
+            (m.categories_accepted ?? []).filter((c: string) => productCategories.includes(c)).length +
+            (m.application_open_date && m.application_close_date &&
+             new Date(m.application_open_date) <= now && now <= new Date(m.application_close_date) ? 10 : 0),
+        }))
+        scored.sort((a: any, b: any) => b.score - a.score)
+        for (const { market } of scored.slice(0, 3)) {
+          await fetch('/api/saved-markets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ market_id: market.id, status: 'interested' }),
+          }).catch(() => {})
+        }
+      } catch {
+        // Non-fatal — dashboard still works without pre-saved markets
+      }
+
       router.push('/dashboard')
     } catch {
       toast({ title: 'Something went wrong', description: 'Please try again.', variant: 'destructive' })

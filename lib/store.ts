@@ -1,4 +1,4 @@
-import { User, ProducerProfile, Product, Label, Document, ChecklistItem, Market, SavedMarket, ApplicationPacket } from '@/types'
+import { User, ProducerProfile, Product, Label, Document, ChecklistItem, Market, SavedMarket, ApplicationPacket, FormFillJob } from '@/types'
 import { generateId } from './utils'
 import bcrypt from 'bcryptjs'
 import path from 'path'
@@ -378,6 +378,42 @@ export async function upsertApplicationPacket(data: Omit<ApplicationPacket, 'id'
   packets.push(packet)
   writeFile('application-packets.json', packets)
   return packet
+}
+
+// ─── Form-Fill Jobs ───────────────────────────────────────────────────────────
+
+export function createFormFillJob(
+  data: Omit<FormFillJob, 'id' | 'created_at' | 'updated_at'>
+): FormFillJob {
+  const jobs = readFile<FormFillJob[]>('form-fill-jobs.json', [])
+  const job: FormFillJob = {
+    ...data,
+    id: generateId(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+  jobs.push(job)
+  writeFile('form-fill-jobs.json', jobs)
+  return job
+}
+
+export function getFormFillJob(jobId: string): FormFillJob | null {
+  const jobs = readFile<FormFillJob[]>('form-fill-jobs.json', [])
+  return jobs.find(j => j.id === jobId) ?? null
+}
+
+export function updateFormFillJob(jobId: string, updates: Partial<FormFillJob>): FormFillJob | null {
+  const jobs = readFile<FormFillJob[]>('form-fill-jobs.json', [])
+  const idx = jobs.findIndex(j => j.id === jobId)
+  if (idx === -1) return null
+  jobs[idx] = { ...jobs[idx], ...updates, updated_at: new Date().toISOString() }
+  writeFile('form-fill-jobs.json', jobs)
+  return jobs[idx]
+}
+
+export function getFormFillJobsForUser(userId: string): FormFillJob[] {
+  const jobs = readFile<FormFillJob[]>('form-fill-jobs.json', [])
+  return jobs.filter(j => j.user_id === userId)
 }
 
 // ─── Seed Data ────────────────────────────────────────────────────────────────
