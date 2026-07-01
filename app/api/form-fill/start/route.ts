@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromRequest } from '@/lib/auth'
 import {
   getProducerProfile, getFormFillJob, getFormFillJobsForUser,
-  createFormFillJob, getMarkets,
+  createFormFillJob, getMarkets, getSavedMarkets,
 } from '@/lib/store'
 import path from 'path'
 import { spawn } from 'child_process'
@@ -59,6 +59,15 @@ export async function POST(req: NextRequest) {
   const marketAppUrls = markets.map(m => m.application_url).filter(Boolean) as string[]
   if (!isAllowedUrl(target_url, marketAppUrls)) {
     return NextResponse.json({ error: 'URL not permitted' }, { status: 403 })
+  }
+
+  // Verify saved_market_id (if given) actually belongs to the caller —
+  // the worker later mutates this record's status on completion.
+  if (saved_market_id) {
+    const ownedMarkets = await getSavedMarkets(profile.id)
+    if (!ownedMarkets.some(m => m.id === saved_market_id)) {
+      return NextResponse.json({ error: 'Invalid saved_market_id' }, { status: 403 })
+    }
   }
 
   // Reject duplicate active jobs for the same saved_market_id
