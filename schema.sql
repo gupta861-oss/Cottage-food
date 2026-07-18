@@ -22,6 +22,7 @@ CREATE TABLE producers (
     standout_factor TEXT,              -- the ONE thing that makes them work
     source TEXT,                       -- where this info came from
     notes TEXT,
+    needs_review INTEGER DEFAULT 0,    -- 1 = ingested but cottage-food match is unconfirmed
     tracked_since TEXT DEFAULT (date('now'))
 );
 
@@ -90,3 +91,11 @@ CREATE TABLE content_ideas (
     notes TEXT,
     created_date TEXT DEFAULT (date('now'))
 );
+
+-- Lets ingestion scripts (e.g. scripts/apify_ingest.py) upsert instead of duplicating.
+-- Plain (non-partial) unique indexes: SQLite treats NULL as distinct from NULL,
+-- so rows with no handle/url still coexist fine without a WHERE clause -- and a
+-- plain index is usable as an ON CONFLICT target without repeating a WHERE
+-- clause in every upsert statement.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_producers_platform_handle ON producers(platform, handle);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_url ON posts(url);

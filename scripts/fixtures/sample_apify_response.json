@@ -1,0 +1,53 @@
+{
+  "_comment": "Hand-written fixture shaped like apify/instagram-scraper output, used by `python scripts/apify_ingest.py --dry-run` to test normalization/upsert logic without calling the live API. Not real Instagram data.",
+  "accounts": [
+    {
+      "profile": {
+        "username": "flourandfig_cottage",
+        "fullName": "Flour & Fig Cottage Bakery",
+        "biography": "Licensed cottage food bakery in Austin, TX. Custom cakes + sourdough. Order via DM, local pickup only.",
+        "followersCount": 4200,
+        "url": "https://www.instagram.com/flourandfig_cottage/"
+      },
+      "posts": [
+        {
+          "url": "https://www.instagram.com/p/fixture001/",
+          "type": "GraphSidecar",
+          "caption": "This week's sourdough lineup 🍞 Pickup Saturday 9-12, DM to reserve. #cottagebakery #austinsourdough",
+          "likesCount": 310,
+          "commentsCount": 28,
+          "timestamp": "2026-06-14T15:00:00.000Z"
+        },
+        {
+          "url": "https://www.instagram.com/p/fixture002/",
+          "type": "GraphVideo",
+          "isVideo": true,
+          "videoViewCount": 8900,
+          "caption": "Cutting into this week's filled brioche -- swipe for the process. #cottagefoodlaw #homebakery",
+          "likesCount": 640,
+          "commentsCount": 51,
+          "timestamp": "2026-06-20T15:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "profile": {
+        "username": "commercialbakeco",
+        "fullName": "Commercial Bake Co",
+        "biography": "Wholesale bakery supplying 40+ cafes. Not a home operation.",
+        "followersCount": 51000,
+        "url": "https://www.instagram.com/commercialbakeco/"
+      },
+      "posts": [
+        {
+          "url": "https://www.instagram.com/p/fixture003/",
+          "type": "GraphImage",
+          "caption": "New wholesale menu out now.",
+          "likesCount": 900,
+          "commentsCount": 12,
+          "timestamp": "2026-06-18T15:00:00.000Z"
+        }
+      ]
+    }
+  ]
+}

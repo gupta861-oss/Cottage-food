@@ -78,18 +78,25 @@ def ensure_db_ready():
 # ---------------------------------------------------------------------------
 
 def engagement_rate(row):
-    """% engagement relative to views (falls back to 0 when no views logged)."""
-    views = row["views"] or 0
-    if views <= 0:
-        return 0.0
+    """% engagement relative to views. Instagram doesn't expose view counts for
+    photo/carousel posts (only Reels), so when views are missing we fall back to
+    engagement relative to the producer's follower count -- the standard proxy
+    used for feed-post engagement rate. Returns 0 only when neither is available."""
     interactions = (row["likes"] or 0) + (row["comments"] or 0) + (row["shares"] or 0) + (row["saves"] or 0)
-    return round((interactions / views) * 100, 2)
+    views = row["views"] or 0
+    if views > 0:
+        return round((interactions / views) * 100, 2)
+    followers = row["follower_count"] if "follower_count" in row.keys() else None
+    if followers:
+        return round((interactions / followers) * 100, 2)
+    return 0.0
 
 
 def posts_with_rates(db, where="", params=()):
     rows = db.execute(
         f"""
-        SELECT posts.*, producers.name AS producer_name, producers.niche AS producer_niche
+        SELECT posts.*, producers.name AS producer_name, producers.niche AS producer_niche,
+               producers.follower_count AS follower_count
         FROM posts
         LEFT JOIN producers ON producers.id = posts.producer_id
         {where}

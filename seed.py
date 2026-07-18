@@ -1,11 +1,21 @@
 """
-Seeds the database with researched starter data: real, publicly-reported
-examples of successful home/cottage bakers, current (2026) baking trends,
-and a first batch of content templates derived from them.
+Seeds the database with researched starter data: publicly-reported examples of
+notable baking accounts, current (2026) baking trends, and a first batch of
+content templates derived from them.
 
-Follower counts and stylistic notes are pulled from public coverage (see the
-`source` field on each row) as of mid-2026. Handles/URLs are left blank where
-not independently verified -- confirm before publishing anything based on them.
+The 5 PRODUCERS below are general baking-influencer benchmarks pulled from
+public coverage (see the `source` field on each row), not a substitute for a
+real cottage-food dataset -- most (Fitwaffle, Ikneadbread) operate at a
+commercial-influencer scale, not as licensed home/cottage operators. They're
+useful contrast (e.g. "how does a 3M-follower account behave vs. a real
+cottage operator"), not the 50-70 account dataset the recommendation engine
+needs to find real patterns. For that, run scripts/apify_ingest.py, which
+pulls real cottage-food-specific Instagram accounts and their actual post
+performance into these same tables -- see README.md.
+
+Follower counts and stylistic notes are pulled from public coverage as of
+mid-2026. Handles/URLs are left blank where not independently verified --
+confirm before publishing anything based on them.
 
 Run via: flask seed-db  (or it runs automatically on first launch of app.py)
 """
@@ -366,54 +376,6 @@ CONTENT_IDEAS = [
 ]
 
 
-EXAMPLE_POSTS = [
-    dict(
-        producer="Ikneadbread",
-        platform="Instagram",
-        content_type="reel",
-        title="[EXAMPLE -- replace with a real logged post] Wheat-stalk scoring timelapse",
-        hook="Text overlay naming the design before the reveal",
-        format_style="process timelapse",
-        trend_tag="Sourdough scoring / crust art",
-        hashtags="#sourdough #scoringart #cottagebakery",
-        likes=4200, comments=310, shares=180, saves=2100, views=95000,
-        is_viral=1,
-        why_it_worked="ILLUSTRATIVE placeholder showing how to log a post -- swap in "
-                       "real numbers from a post you actually observed. High save rate "
-                       "relative to likes usually signals 'reference/tutorial' value.",
-    ),
-    dict(
-        producer="Fitwaffle (Eloise Head)",
-        platform="TikTok",
-        content_type="reel",
-        title="[EXAMPLE -- replace with a real logged post] 3-ingredient shortbread",
-        hook="'3 ingredients, no mixer' text overlay before footage",
-        format_style="dump and mix",
-        trend_tag="'Dump and mix' simplicity recipes",
-        hashtags="#easyrecipe #shortbread #baking",
-        likes=18000, comments=650, shares=4200, saves=9800, views=410000,
-        is_viral=1,
-        why_it_worked="ILLUSTRATIVE placeholder -- delete once you've logged your own "
-                       "or a real competitor's data. High share count fits a 'simple "
-                       "enough to send a friend' hook.",
-    ),
-    dict(
-        producer=None,
-        platform="Instagram",
-        content_type="carousel",
-        title="[EXAMPLE -- replace with a real logged post] Farmers market lineup post",
-        hook="Local hook in first caption line",
-        format_style="local spotlight",
-        trend_tag=None,
-        hashtags="#supportlocal #farmersmarket",
-        likes=140, comments=22, shares=6, saves=18, views=1900,
-        is_viral=0,
-        why_it_worked="ILLUSTRATIVE placeholder for a modest, everyday local post -- "
-                       "useful as a baseline to compare against your viral outliers.",
-    ),
-]
-
-
 def run(db):
     producer_ids = {}
     for p in PRODUCERS:
@@ -457,22 +419,6 @@ def run(db):
             ),
         )
         template_ids[tpl["name"]] = cur.lastrowid
-
-    for ep in EXAMPLE_POSTS:
-        db.execute(
-            """INSERT INTO posts
-            (producer_id, platform, content_type, title, url, posted_date, hook,
-             format_style, trend_tag, hashtags, likes, comments, shares, saves, views,
-             is_viral, why_it_worked)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (
-                producer_ids.get(ep["producer"]) if ep["producer"] else None,
-                ep["platform"], ep["content_type"], ep["title"], None, None, ep["hook"],
-                ep["format_style"], ep["trend_tag"],
-                ep["hashtags"], ep["likes"], ep["comments"], ep["shares"], ep["saves"], ep["views"],
-                ep["is_viral"], ep["why_it_worked"],
-            ),
-        )
 
     for idea in CONTENT_IDEAS:
         db.execute(
