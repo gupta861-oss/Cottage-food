@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Template Library · Cottage Social Intel{% endblock %}
+{% block content %}
+<div class="actions-row">
+  <div>
+    <h1>Template Library</h1>
+    <p class="subtitle">Reusable, fill-in-the-blank content templates derived from what's actually working.</p>
+  </div>
+  <a class="btn" href="{{ url_for('template_new') }}">+ New template</a>
+</div>
+
+{% if templates %}
+<div class="grid">
+  {% for t in templates %}
+  <div class="card">
+    <h3><a href="{{ url_for('template_detail', template_id=t.id) }}">{{ t.name }}</a></h3>
+    <div class="pill-list">
+      <span class="badge">{{ t.content_type }}</span>
+      {% if t.goal %}<span class="badge">{{ t.goal }}</span>{% endif %}
+      {% if t.effort_level %}<span class="badge">{{ t.effort_level }} effort</span>{% endif %}
+    </div>
+    <p style="font-size:0.85rem; color:var(--muted);">
+      {% if t.trend_name %}Based on trend: {{ t.trend_name }}<br>{% endif %}
+      {% if t.producer_name %}Based on: {{ t.producer_name }}{% endif %}
+    </p>
+    <a class="btn small secondary" href="{{ url_for('template_detail', template_id=t.id) }}">Open</a>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="empty-state">No templates yet. <a href="{{ url_for('template_new') }}">Build your first one</a>.</p>
+{% endif %}
+{% endblock %}

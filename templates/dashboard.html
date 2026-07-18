@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Cottage Social Intel{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<p class="subtitle">A snapshot of what you're tracking and what it's telling you.</p>
+
+<div class="grid">
+  <div class="card">
+    <div class="stat">{{ rec.producer_count }}</div>
+    <div class="stat-label">Producers tracked</div>
+  </div>
+  <div class="card">
+    <div class="stat">{{ rec.post_count }}</div>
+    <div class="stat-label">Posts/reels logged</div>
+  </div>
+  <div class="card">
+    <div class="stat">{{ rec.template_count }}</div>
+    <div class="stat-label">Templates in library</div>
+  </div>
+  <div class="card">
+    <div class="stat">{{ rec.rising_trends|length }}</div>
+    <div class="stat-label">High-fit rising trends</div>
+  </div>
+</div>
+
+<h2>Top performing content types</h2>
+{% if rec.top_content_types %}
+  {% set maxv = rec.top_content_types[0].avg_engagement %}
+  {% for row in rec.top_content_types %}
+  <div class="bar-row">
+    <div class="bar-label">{{ row.key }}</div>
+    <div class="bar-track"><div class="bar-fill" style="width: {{ (row.avg_engagement / maxv * 100) if maxv else 0 }}%"></div></div>
+    <div class="bar-value">{{ row.avg_engagement }}% avg ({{ row.sample_size }})</div>
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="empty-state">No posts logged yet. <a href="{{ url_for('post_new') }}">Log your first post</a> to start seeing patterns.</p>
+{% endif %}
+
+<h2>Top viral posts you've logged</h2>
+{% if rec.viral_posts %}
+<table>
+  <tr><th>Post</th><th>Producer</th><th>Type</th><th>Engagement</th></tr>
+  {% for p in rec.viral_posts %}
+  <tr>
+    <td>{{ p.title }}</td>
+    <td>{{ p.producer_name or "—" }}</td>
+    <td><span class="badge">{{ p.content_type }}</span></td>
+    <td>{{ p.engagement_rate }}%</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="empty-state">Nothing marked viral yet.</p>
+{% endif %}
+
+<h2>Rising trends worth acting on</h2>
+{% if rec.rising_trends %}
+<div class="pill-list">
+  {% for t in rec.rising_trends %}
+  <span class="badge rising">{{ t.name }} (fit {{ t.niche_fit_score }}/5)</span>
+  {% endfor %}
+</div>
+{% else %}
+<p class="empty-state">No rising trends logged. <a href="{{ url_for('trend_new') }}">Add one</a>.</p>
+{% endif %}
+
+<div class="actions-row" style="margin-top:1.5rem;">
+  <a class="btn" href="{{ url_for('recommendations') }}">See full recommendations →</a>
+</div>
+
+<h2>Recent content ideas</h2>
+{% if recent_ideas %}
+<table>
+  <tr><th>Idea</th><th>Template</th><th>Status</th><th>Target date</th></tr>
+  {% for i in recent_ideas %}
+  <tr>
+    <td>{{ i.working_title }}</td>
+    <td>{{ i.template_name or "—" }}</td>
+    <td><span class="badge">{{ i.status }}</span></td>
+    <td>{{ i.target_date or "—" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="empty-state">No content ideas yet. Generate some from the <a href="{{ url_for('recommendations') }}">recommendations page</a>.</p>
+{% endif %}
+{% endblock %}

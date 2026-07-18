@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}New Template{% endblock %}
+{% block content %}
+<h1>New Template</h1>
+<form class="stacked" method="post">
+  <div class="field-row">
+    <div>
+      <label>Name *</label>
+      <input name="name" required>
+    </div>
+    <div>
+      <label>Content type *</label>
+      <input name="content_type" required placeholder="reel, carousel, photo...">
+    </div>
+  </div>
+  <div class="field-row">
+    <div>
+      <label>Goal</label>
+      <select name="goal">
+        <option value="awareness">awareness</option>
+        <option value="engagement">engagement</option>
+        <option value="sales">sales</option>
+        <option value="trust">trust</option>
+      </select>
+    </div>
+    <div>
+      <label>Effort level</label>
+      <select name="effort_level">
+        <option value="low">low</option>
+        <option value="medium">medium</option>
+        <option value="high">high</option>
+      </select>
+    </div>
+  </div>
+  <div>
+    <label>Hook formula</label>
+    <textarea name="hook_formula" placeholder="What happens in the first 1-2 seconds and why it grabs attention"></textarea>
+  </div>
+  <div>
+    <label>Shot list / structure</label>
+    <textarea name="structure_steps" placeholder="One beat per line, e.g.&#10;1. 0-2s: ...&#10;2. 2-4s: ..." style="min-height:140px;"></textarea>
+  </div>
+  <div>
+    <label>Call to action formula</label>
+    <input name="cta_formula">
+  </div>
+  <div class="field-row">
+    <div>
+      <label>Based on trend</label>
+      <select name="based_on_trend_id">
+        <option value="">— none —</option>
+        {% for tr in trends %}<option value="{{ tr.id }}">{{ tr.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Based on producer</label>
+      <select name="based_on_producer_id">
+        <option value="">— none —</option>
+        {% for p in producers %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+      </select>
+    </div>
+  </div>
+  <div>
+    <label>Sample caption</label>
+    <textarea name="sample_caption"></textarea>
+  </div>
+  <div>
+    <label>Tags (comma-separated)</label>
+    <input name="tags">
+  </div>
+  <div>
+    <button class="btn" type="submit">Save template</button>
+  </div>
+</form>
+{% endblock %}

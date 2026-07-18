@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Recommendations · Cottage Social Intel{% endblock %}
+{% block content %}
+<h1>Recommendations</h1>
+<p class="subtitle">Generated live from everything you've logged in Producers, Posts, and Trends.
+The more you log, the sharper this gets.</p>
+
+<div class="two-col">
+  <div>
+    <h2>What's working: content types</h2>
+    {% if rec.top_content_types %}
+      {% set maxv = rec.top_content_types[0].avg_engagement %}
+      {% for row in rec.top_content_types %}
+      <div class="bar-row">
+        <div class="bar-label">{{ row.key }}</div>
+        <div class="bar-track"><div class="bar-fill" style="width: {{ (row.avg_engagement / maxv * 100) if maxv else 0 }}%"></div></div>
+        <div class="bar-value">{{ row.avg_engagement }}% ({{ row.sample_size }})</div>
+      </div>
+      {% endfor %}
+    {% else %}<p class="empty-state">Log some posts to unlock this.</p>{% endif %}
+
+    <h2>What's working: hooks</h2>
+    {% if rec.top_hooks %}
+      {% set maxv = rec.top_hooks[0].avg_engagement %}
+      {% for row in rec.top_hooks %}
+      <div class="bar-row">
+        <div class="bar-label" title="{{ row.key }}">{{ row.key[:40] }}{% if row.key|length > 40 %}…{% endif %}</div>
+        <div class="bar-track"><div class="bar-fill" style="width: {{ (row.avg_engagement / maxv * 100) if maxv else 0 }}%"></div></div>
+        <div class="bar-value">{{ row.avg_engagement }}% ({{ row.sample_size }})</div>
+      </div>
+      {% endfor %}
+    {% else %}<p class="empty-state">Log hooks on your posts to unlock this.</p>{% endif %}
+
+    <h2>What's working: formats</h2>
+    {% if rec.top_formats %}
+      {% set maxv = rec.top_formats[0].avg_engagement %}
+      {% for row in rec.top_formats %}
+      <div class="bar-row">
+        <div class="bar-label">{{ row.key }}</div>
+        <div class="bar-track"><div class="bar-fill" style="width: {{ (row.avg_engagement / maxv * 100) if maxv else 0 }}%"></div></div>
+        <div class="bar-value">{{ row.avg_engagement }}% ({{ row.sample_size }})</div>
+      </div>
+      {% endfor %}
+    {% else %}<p class="empty-state">Log a format_style on your posts to unlock this.</p>{% endif %}
+  </div>
+
+  <div>
+    <h2>Rising trends, ranked by fit</h2>
+    {% if rec.rising_trends %}
+    {% for t in rec.rising_trends %}
+    <div class="card" style="margin-bottom:0.6rem;">
+      <strong>{{ t.name }}</strong> <span class="badge rising">fit {{ t.niche_fit_score }}/5</span>
+      <p style="font-size:0.85rem; color:var(--muted); margin:0.3rem 0 0;">{{ t.description }}</p>
+    </div>
+    {% endfor %}
+    {% else %}<p class="empty-state">No rising trends logged yet.</p>{% endif %}
+
+    <h2>Untapped trends</h2>
+    <p class="helptext">High-fit rising trends with no template built yet.</p>
+    {% if rec.trend_gaps %}
+      <ul>
+      {% for t in rec.trend_gaps %}
+        <li>{{ t.name }} — <a href="{{ url_for('template_new') }}">build a template</a></li>
+      {% endfor %}
+      </ul>
+    {% else %}<p class="empty-state">Every high-fit trend has a template. Nice.</p>{% endif %}
+
+    <h2>Format gaps</h2>
+    <p class="helptext">Content types you've seen perform, but have no template for.</p>
+    {% if rec.format_gaps %}
+      <div class="pill-list">
+      {% for f in rec.format_gaps %}<span class="badge">{{ f }}</span>{% endfor %}
+      </div>
+    {% else %}<p class="empty-state">No gaps detected.</p>{% endif %}
+  </div>
+</div>
+
+<h2>Recommended next posts</h2>
+<p class="subtitle">
+{% if rec.top_content_types %}
+  Your best-performing content type right now is <strong>{{ rec.top_content_types[0].key }}</strong>
+  ({{ rec.top_content_types[0].avg_engagement }}% avg engagement) — prioritize templates of that type.
+{% else %}
+  Log a few posts to get a content-type ranking here. In the meantime, here's your full template library.
+{% endif %}
+</p>
+<p class="helptext">Open a template for the full shot list, then add it to your
+<a href="{{ url_for('ideas_list') }}">idea calendar</a> from its detail page.</p>
+<a class="btn secondary" href="{{ url_for('templates_list') }}">Browse template library →</a>
+{% endblock %}

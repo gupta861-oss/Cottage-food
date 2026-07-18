@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Cottage Bakery Social Intelligence{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('dashboard') }}">🥐 Cottage Social Intel</a>
+    <nav>
+      <a href="{{ url_for('dashboard') }}">Dashboard</a>
+      <a href="{{ url_for('producers_list') }}">Producers</a>
+      <a href="{{ url_for('posts_list') }}">Posts &amp; Reels</a>
+      <a href="{{ url_for('trends_list') }}">Trends</a>
+      <a href="{{ url_for('templates_list') }}">Templates</a>
+      <a href="{{ url_for('recommendations') }}">Recommendations</a>
+      <a href="{{ url_for('ideas_list') }}">Idea Calendar</a>
+    </nav>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer">
+    <p>Data is only as good as what you log. Update producers/posts/trends regularly for
+    recommendations that stay current.</p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Trends · Cottage Social Intel{% endblock %}
+{% block content %}
+<div class="actions-row">
+  <div>
+    <h1>Trends</h1>
+    <p class="subtitle">Formats, flavors, and aesthetics going viral in the baking niche — ranked by
+    how well they fit a cottage bakery.</p>
+  </div>
+  <a class="btn" href="{{ url_for('trend_new') }}">+ Add trend</a>
+</div>
+
+{% if trends %}
+<table>
+  <tr><th>Trend</th><th>Category</th><th>Status</th><th>Niche fit</th><th>Description</th><th></th></tr>
+  {% for t in trends %}
+  <tr>
+    <td><strong>{{ t.name }}</strong><br><span class="helptext">{{ t.platform or "" }}</span></td>
+    <td>{{ t.category or "—" }}</td>
+    <td><span class="badge {{ t.status }}">{{ t.status }}</span></td>
+    <td>{{ t.niche_fit_score }}/5</td>
+    <td style="max-width:320px;">{{ t.description or "—" }}</td>
+    <td>
+      <form method="post" action="{{ url_for('trend_delete', trend_id=t.id) }}" onsubmit="return confirm('Delete this trend?');">
+        <button class="btn small danger" type="submit">Delete</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="empty-state">No trends tracked yet. <a href="{{ url_for('trend_new') }}">Add one</a>.</p>
+{% endif %}
+{% endblock %}

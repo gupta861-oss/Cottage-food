@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ producer.name }} · Cottage Social Intel{% endblock %}
+{% block content %}
+<div class="actions-row">
+  <div>
+    <h1>{{ producer.name }}</h1>
+    <p class="subtitle">{{ producer.platform }}{% if producer.location %} · {{ producer.location }}{% endif %}{% if producer.niche %} · {{ producer.niche }}{% endif %}</p>
+  </div>
+  <div>
+    <a class="btn secondary" href="{{ url_for('producer_edit', producer_id=producer.id) }}">Edit</a>
+    <form method="post" action="{{ url_for('producer_delete', producer_id=producer.id) }}" style="display:inline" onsubmit="return confirm('Delete this producer and all associated posts?');">
+      <button class="btn danger" type="submit">Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card"><div class="stat">{{ "{:,}".format(producer.follower_count) if producer.follower_count else "—" }}</div><div class="stat-label">Followers</div></div>
+  <div class="card"><div class="stat">{{ producer.avg_engagement_rate ~ "%" if producer.avg_engagement_rate else "—" }}</div><div class="stat-label">Avg engagement</div></div>
+  <div class="card"><div class="stat">{{ producer.posting_frequency_per_week or "—" }}</div><div class="stat-label">Posts/week</div></div>
+  <div class="card"><div class="stat">{{ posts|length }}</div><div class="stat-label">Posts logged</div></div>
+</div>
+
+<h2>Content style</h2>
+<p>{{ producer.content_style or "Not recorded yet." }}</p>
+
+<h2>What makes them stand out</h2>
+<p>{{ producer.standout_factor or "Not recorded yet." }}</p>
+
+{% if producer.source %}<p class="helptext">Source: {{ producer.source }}</p>{% endif %}
+{% if producer.notes %}<h2>Notes</h2><p>{{ producer.notes }}</p>{% endif %}
+
+<h2>Logged posts from this producer</h2>
+{% if posts %}
+<table>
+  <tr><th>Title</th><th>Type</th><th>Hook</th><th>Engagement</th><th>Viral?</th></tr>
+  {% for p in posts %}
+  <tr>
+    <td>{{ p.title }}</td>
+    <td><span class="badge">{{ p.content_type }}</span></td>
+    <td>{{ p.hook or "—" }}</td>
+    <td>{{ p.engagement_rate }}%</td>
+    <td>{% if p.is_viral %}<span class="badge viral">viral</span>{% else %}—{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="empty-state">No posts logged for this producer yet. <a href="{{ url_for('post_new') }}">Log one</a>.</p>
+{% endif %}
+{% endblock %}

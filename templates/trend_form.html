@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Add Trend{% endblock %}
+{% block content %}
+<h1>Add Trend</h1>
+<form class="stacked" method="post">
+  <div>
+    <label>Name *</label>
+    <input name="name" required>
+  </div>
+  <div class="field-row">
+    <div>
+      <label>Platform</label>
+      <input name="platform" placeholder="TikTok, Instagram Reels...">
+    </div>
+    <div>
+      <label>Category</label>
+      <input name="category" placeholder="format, flavor, audio, aesthetic, challenge">
+    </div>
+  </div>
+  <div>
+    <label>Description</label>
+    <textarea name="description"></textarea>
+  </div>
+  <div class="field-row">
+    <div>
+      <label>First observed</label>
+      <input name="first_observed" placeholder="e.g. 2026 or a specific date">
+    </div>
+    <div>
+      <label>Status</label>
+      <select name="status">
+        <option value="rising">rising</option>
+        <option value="peak">peak</option>
+        <option value="declining">declining</option>
+        <option value="evergreen">evergreen</option>
+      </select>
+    </div>
+  </div>
+  <div>
+    <label>Niche fit score (1-5)</label>
+    <input name="niche_fit_score" type="number" min="1" max="5" value="3">
+    <p class="helptext">How well this trend fits a cottage food bakery specifically.</p>
+  </div>
+  <div>
+    <label>Example URL</label>
+    <input name="example_url">
+  </div>
+  <div>
+    <label>Source</label>
+    <input name="source">
+  </div>
+  <div>
+    <label>Notes</label>
+    <textarea name="notes"></textarea>
+  </div>
+  <div>
+    <button class="btn" type="submit">Add trend</button>
+  </div>
+</form>
+{% endblock %}

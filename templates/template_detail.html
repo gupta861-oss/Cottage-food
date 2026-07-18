@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ t.name }} · Template{% endblock %}
+{% block content %}
+<div class="actions-row">
+  <div>
+    <h1>{{ t.name }}</h1>
+    <div class="pill-list">
+      <span class="badge">{{ t.content_type }}</span>
+      {% if t.goal %}<span class="badge">{{ t.goal }}</span>{% endif %}
+      {% if t.effort_level %}<span class="badge">{{ t.effort_level }} effort</span>{% endif %}
+    </div>
+  </div>
+  <form method="post" action="{{ url_for('template_delete', template_id=t.id) }}" onsubmit="return confirm('Delete this template?');">
+    <button class="btn danger" type="submit">Delete</button>
+  </form>
+</div>
+
+{% if t.trend_name or t.producer_name %}
+<p class="helptext">
+  {% if t.trend_name %}Based on trend: <strong>{{ t.trend_name }}</strong>{% endif %}
+  {% if t.trend_name and t.producer_name %} · {% endif %}
+  {% if t.producer_name %}Inspired by: <strong>{{ t.producer_name }}</strong>{% endif %}
+</p>
+{% endif %}
+
+<h2>Hook formula</h2>
+<p>{{ t.hook_formula or "—" }}</p>
+
+<h2>Shot list / structure</h2>
+<pre style="white-space:pre-wrap; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:1rem; font-size:0.9rem;">{{ t.structure_steps or "—" }}</pre>
+
+<h2>Call to action</h2>
+<p>{{ t.cta_formula or "—" }}</p>
+
+<h2>Sample caption</h2>
+<p style="font-style:italic;">{{ t.sample_caption or "—" }}</p>
+
+{% if t.tags %}
+<h2>Tags</h2>
+<div class="pill-list">{% for tag in t.tags.split(',') %}<span class="badge">{{ tag.strip() }}</span>{% endfor %}</div>
+{% endif %}
+
+<h2>Turn this into a scheduled idea</h2>
+<form class="stacked" method="post" action="{{ url_for('idea_new') }}">
+  <input type="hidden" name="template_id" value="{{ t.id }}">
+  <div>
+    <label>Working title *</label>
+    <input name="working_title" required placeholder="e.g. Peach filling reveal for July market">
+  </div>
+  <div class="field-row">
+    <div>
+      <label>Target date</label>
+      <input name="target_date" type="date">
+    </div>
+    <div>
+      <label>Notes</label>
+      <input name="notes">
+    </div>
+  </div>
+  <div>
+    <button class="btn" type="submit">Add to idea calendar</button>
+  </div>
+</form>
+{% endblock %}

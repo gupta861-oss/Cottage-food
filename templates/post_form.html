@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Log a Post{% endblock %}
+{% block content %}
+<h1>Log a Post/Reel</h1>
+<p class="subtitle">Log posts from producers you're tracking, or your own, so the recommendation
+engine has real data to learn from.</p>
+<form class="stacked" method="post">
+  <div class="field-row">
+    <div>
+      <label>Title/description *</label>
+      <input name="title" required placeholder="What is this post?">
+    </div>
+    <div>
+      <label>Producer</label>
+      <select name="producer_id">
+        <option value="">— none / this is my own post —</option>
+        {% for p in producers %}
+        <option value="{{ p.id }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+  <div class="field-row">
+    <div>
+      <label>Platform *</label>
+      <input name="platform" required placeholder="Instagram, TikTok, Facebook...">
+    </div>
+    <div>
+      <label>Content type *</label>
+      <input name="content_type" required placeholder="reel, carousel, photo, story...">
+    </div>
+  </div>
+  <div class="field-row">
+    <div>
+      <label>URL</label>
+      <input name="url">
+    </div>
+    <div>
+      <label>Posted date</label>
+      <input name="posted_date" type="date">
+    </div>
+  </div>
+  <div>
+    <label>Hook (the first line/visual that grabs attention)</label>
+    <input name="hook">
+  </div>
+  <div class="field-row">
+    <div>
+      <label>Format style</label>
+      <input name="format_style" placeholder="process timelapse, before/after, POV...">
+    </div>
+    <div>
+      <label>Trend tag</label>
+      <input name="trend_tag" placeholder="matches a trend name if relevant">
+    </div>
+  </div>
+  <div>
+    <label>Hashtags</label>
+    <input name="hashtags">
+  </div>
+  <div class="field-row">
+    <div><label>Likes</label><input name="likes" type="number" min="0" value="0"></div>
+    <div><label>Comments</label><input name="comments" type="number" min="0" value="0"></div>
+  </div>
+  <div class="field-row">
+    <div><label>Shares</label><input name="shares" type="number" min="0" value="0"></div>
+    <div><label>Saves</label><input name="saves" type="number" min="0" value="0"></div>
+  </div>
+  <div>
+    <label>Views</label>
+    <input name="views" type="number" min="0" value="0">
+    <p class="helptext">Engagement rate = (likes+comments+shares+saves) / views. Leave views at 0 if unknown.</p>
+  </div>
+  <div>
+    <label><input type="checkbox" name="is_viral" style="width:auto; display:inline-block; margin-right:0.4rem;"> Mark as viral / outperformed the norm</label>
+  </div>
+  <div>
+    <label>Why it worked</label>
+    <textarea name="why_it_worked" placeholder="Your read on why this one popped"></textarea>
+  </div>
+  <div>
+    <button class="btn" type="submit">Log post</button>
+  </div>
+</form>
+{% endblock %}

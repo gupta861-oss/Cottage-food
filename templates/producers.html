@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Producers · Cottage Social Intel{% endblock %}
+{% block content %}
+<div class="actions-row">
+  <div>
+    <h1>Producers</h1>
+    <p class="subtitle">Cottage food bakeries and home bakers you're tracking for benchmarking and inspiration.</p>
+  </div>
+  <a class="btn" href="{{ url_for('producer_new') }}">+ Add producer</a>
+</div>
+
+{% if producers %}
+<table>
+  <tr><th>Name</th><th>Platform</th><th>Niche</th><th>Followers</th><th>Standout factor</th><th></th></tr>
+  {% for p in producers %}
+  <tr>
+    <td><a href="{{ url_for('producer_detail', producer_id=p.id) }}">{{ p.name }}</a></td>
+    <td>{{ p.platform }}</td>
+    <td>{{ p.niche or "—" }}</td>
+    <td>{{ "{:,}".format(p.follower_count) if p.follower_count else "—" }}</td>
+    <td>{{ p.standout_factor or "—" }}</td>
+    <td><a class="btn small secondary" href="{{ url_for('producer_detail', producer_id=p.id) }}">View</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="empty-state">No producers tracked yet. <a href="{{ url_for('producer_new') }}">Add your first one</a>.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Idea Calendar · Cottage Social Intel{% endblock %}
+{% block content %}
+<h1>Idea Calendar</h1>
+<p class="subtitle">Templates you've queued up to shoot and post.</p>
+
+<form class="stacked" method="post" action="{{ url_for('idea_new') }}" style="margin-bottom:2rem;">
+  <div class="field-row">
+    <div>
+      <label>Working title *</label>
+      <input name="working_title" required>
+    </div>
+    <div>
+      <label>Template</label>
+      <select name="template_id">
+        <option value="">— none —</option>
+        {% for t in templates %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+      </select>
+    </div>
+  </div>
+  <div class="field-row">
+    <div>
+      <label>Target date</label>
+      <input name="target_date" type="date">
+    </div>
+    <div>
+      <label>Notes</label>
+      <input name="notes">
+    </div>
+  </div>
+  <div>
+    <button class="btn" type="submit">Add idea</button>
+  </div>
+</form>
+
+{% if ideas %}
+<div class="kanban">
+  {% for status in ['idea', 'planned', 'shot', 'posted'] %}
+  <div class="kanban-col">
+    <h3>{{ status }}</h3>
+    {% for i in ideas if i.status == status %}
+    <div class="kanban-card">
+      <strong>{{ i.working_title }}</strong>
+      <div class="meta">{{ i.template_name or "no template" }}{% if i.target_date %} · {{ i.target_date }}{% endif %}</div>
+      {% if i.notes %}<div class="meta">{{ i.notes }}</div>{% endif %}
+      <div class="pill-list">
+        <form method="post" action="{{ url_for('idea_status', idea_id=i.id) }}">
+          <select name="status" onchange="this.form.submit()">
+            {% for s in ['idea', 'planned', 'shot', 'posted'] %}
+            <option value="{{ s }}" {{ 'selected' if s == i.status else '' }}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </form>
+        <form method="post" action="{{ url_for('idea_delete', idea_id=i.id) }}" onsubmit="return confirm('Delete this idea?');">
+          <button class="btn small danger" type="submit">Delete</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="empty-state">No ideas queued yet. Add one above, or generate one from a
+<a href="{{ url_for('templates_list') }}">template</a>.</p>
+{% endif %}
+{% endblock %}

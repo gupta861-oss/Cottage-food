@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if producer else "Add" }} Producer{% endblock %}
+{% block content %}
+<h1>{{ "Edit" if producer else "Add" }} Producer</h1>
+<form class="stacked" method="post">
+  <div>
+    <label>Name *</label>
+    <input name="name" required value="{{ producer.name if producer else '' }}">
+  </div>
+  <div class="field-row">
+    <div>
+      <label>Platform *</label>
+      <input name="platform" required placeholder="Instagram, TikTok, Facebook..." value="{{ producer.platform if producer else '' }}">
+    </div>
+    <div>
+      <label>Niche</label>
+      <input name="niche" placeholder="custom cakes, sourdough, macarons..." value="{{ producer.niche if producer else '' }}">
+    </div>
+  </div>
+  <div class="field-row">
+    <div>
+      <label>Handle</label>
+      <input name="handle" placeholder="@handle" value="{{ producer.handle if producer else '' }}">
+    </div>
+    <div>
+      <label>URL</label>
+      <input name="url" value="{{ producer.url if producer else '' }}">
+    </div>
+  </div>
+  <div class="field-row">
+    <div>
+      <label>Location</label>
+      <input name="location" value="{{ producer.location if producer else '' }}">
+    </div>
+    <div>
+      <label>Follower count</label>
+      <input name="follower_count" type="number" min="0" value="{{ producer.follower_count if producer else '' }}">
+    </div>
+  </div>
+  <div class="field-row">
+    <div>
+      <label>Avg engagement rate (%)</label>
+      <input name="avg_engagement_rate" type="number" step="0.01" min="0" value="{{ producer.avg_engagement_rate if producer else '' }}">
+    </div>
+    <div>
+      <label>Posting frequency (per week)</label>
+      <input name="posting_frequency_per_week" type="number" step="0.1" min="0" value="{{ producer.posting_frequency_per_week if producer else '' }}">
+    </div>
+  </div>
+  <div>
+    <label>Content style</label>
+    <textarea name="content_style" placeholder="Describe their typical format mix, pacing, editing style...">{{ producer.content_style if producer else '' }}</textarea>
+  </div>
+  <div>
+    <label>Standout factor</label>
+    <textarea name="standout_factor" placeholder="The ONE thing that makes their social media work">{{ producer.standout_factor if producer else '' }}</textarea>
+  </div>
+  <div>
+    <label>Source</label>
+    <input name="source" placeholder="Where this info came from" value="{{ producer.source if producer else '' }}">
+  </div>
+  <div>
+    <label>Notes</label>
+    <textarea name="notes">{{ producer.notes if producer else '' }}</textarea>
+  </div>
+  <div>
+    <button class="btn" type="submit">{{ "Save changes" if producer else "Add producer" }}</button>
+  </div>
+</form>
+{% endblock %}
