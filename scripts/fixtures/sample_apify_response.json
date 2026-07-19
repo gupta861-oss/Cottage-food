@@ -1,5 +1,5 @@
 {
-  "_comment": "Hand-written fixture shaped like apify/instagram-scraper output, used by `python scripts/apify_ingest.py --dry-run` to test normalization/upsert logic without calling the live API. Not real Instagram data.",
+  "_comment": "Hand-written fixture shaped like apify/instagram-scraper's VERIFIED real output (type/productType values, hashtags-as-array, videoPlayCount vs always-null videoViewCount) confirmed via a live API call during development -- see scripts/apify_ingest.py docstring. Used by `python scripts/apify_ingest.py --dry-run` to test normalization/upsert logic without calling the live API. Not real Instagram data.",
   "accounts": [
     {
       "profile": {
@@ -12,18 +12,22 @@
       "posts": [
         {
           "url": "https://www.instagram.com/p/fixture001/",
-          "type": "GraphSidecar",
+          "type": "Sidecar",
+          "productType": "carousel_container",
           "caption": "This week's sourdough lineup 🍞 Pickup Saturday 9-12, DM to reserve. #cottagebakery #austinsourdough",
+          "hashtags": ["cottagebakery", "austinsourdough"],
           "likesCount": 310,
           "commentsCount": 28,
           "timestamp": "2026-06-14T15:00:00.000Z"
         },
         {
           "url": "https://www.instagram.com/p/fixture002/",
-          "type": "GraphVideo",
-          "isVideo": true,
-          "videoViewCount": 8900,
+          "type": "Video",
+          "productType": "clips",
+          "videoViewCount": null,
+          "videoPlayCount": 8900,
           "caption": "Cutting into this week's filled brioche -- swipe for the process. #cottagefoodlaw #homebakery",
+          "hashtags": ["cottagefoodlaw", "homebakery"],
           "likesCount": 640,
           "commentsCount": 51,
           "timestamp": "2026-06-20T15:00:00.000Z"
@@ -41,8 +45,10 @@
       "posts": [
         {
           "url": "https://www.instagram.com/p/fixture003/",
-          "type": "GraphImage",
+          "type": "Image",
+          "productType": "feed",
           "caption": "New wholesale menu out now.",
+          "hashtags": [],
           "likesCount": 900,
           "commentsCount": 12,
           "timestamp": "2026-06-18T15:00:00.000Z"

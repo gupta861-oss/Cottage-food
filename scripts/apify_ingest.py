@@ -10,13 +10,19 @@ limits, CAPTCHAs, account bans). Apify is a specialized provider that owns that
 scraping/ToS surface; this script only talks to Apify's own API, never to
 Instagram directly.
 
-IMPORTANT -- verify the field mapping before a real run:
-Apify's actor output field names occasionally change between actor versions. The
-NORMALIZE_* mappings below list several plausible key names per field (based on
-public documentation as of mid-2026) and take whichever is present, but you
-should run once with --dry-run against a real sample (see README) or a small
---limit-accounts 2 live run and eyeball the resulting rows before trusting a
-full 50-70 account pull.
+Talks to Apify's REST API directly via `requests` rather than the official
+`apify-client` SDK -- the SDK's default HTTP backend (`impit`, a Rust client
+that does browser-like TLS fingerprinting) failed to negotiate through this
+project's sandboxed proxy setup in testing (connection reset at the TCP/TLS
+layer, even with the proxy explicitly configured), while plain `requests`
+worked without issue. If you hit connection errors running this outside a
+proxied sandbox, that's unrelated and worth reporting separately.
+
+Field mapping below was verified against apify/instagram-scraper's actual
+published input schema (fetched live via GET /v2/acts/apify~instagram-scraper
+and its build's inputSchema) as of mid-2026, not guessed from docs alone. If
+Apify changes the actor's schema later, re-check with the same GET call before
+trusting a big pull.
 
 Usage:
     pip install -r scripts/requirements.txt
@@ -34,12 +40,16 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import requests
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = REPO_ROOT / "instance" / "cottage_food.db"
 SCHEMA_PATH = REPO_ROOT / "schema.sql"
 FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "sample_apify_response.json"
 
-INSTAGRAM_SCRAPER_ACTOR = "apify/instagram-scraper"
+INSTAGRAM_SCRAPER_ACTOR_ID = "apify~instagram-scraper"
+APIFY_API_BASE = "https://api.apify.com/v2"
+RUN_SYNC_TIMEOUT_SECS = 280  # Apify's run-sync-get-dataset-items endpoint caps around 300s
 
 # Starter hashtags used for discovery. Cottage food operators consistently tag
 # their state's cottage food law and/or "cottage bakery" / "home bakery" --
@@ -77,7 +87,7 @@ def load_dotenv_if_present():
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
-def get_client():
+def get_token():
     token = os.environ.get("APIFY_API_TOKEN")
     if not token:
         sys.exit(
@@ -85,11 +95,23 @@ def get_client():
             "(https://apify.com) and either `export APIFY_API_TOKEN=...` or "
             "put it in a .env file (see .env.example). Not needed for --dry-run."
         )
-    try:
-        from apify_client import ApifyClient
-    except ImportError:
-        sys.exit("Missing dependency. Run: pip install -r scripts/requirements.txt")
-    return ApifyClient(token)
+    return token
+
+
+def call_actor_sync(token, run_input):
+    """Runs the Instagram Scraper actor and returns its dataset items directly,
+    via Apify's synchronous run-sync-get-dataset-items endpoint (avoids manually
+    starting a run and polling for completion)."""
+    url = f"{APIFY_API_BASE}/acts/{INSTAGRAM_SCRAPER_ACTOR_ID}/run-sync-get-dataset-items"
+    resp = requests.post(
+        url,
+        params={"token": token, "timeout": RUN_SYNC_TIMEOUT_SECS},
+        json=run_input,
+        timeout=RUN_SYNC_TIMEOUT_SECS + 20,
+    )
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Apify actor call failed ({resp.status_code}): {resp.text[:500]}")
+    return resp.json()
 
 
 def is_cottage_food_bio(bio):
@@ -100,14 +122,18 @@ def is_cottage_food_bio(bio):
 
 
 def classify_content_type(item):
-    """Maps Apify's post-type fields to our content_type vocabulary."""
-    raw_type = (item.get("type") or item.get("productType") or "").lower()
-    if "reel" in raw_type or "clip" in raw_type or item.get("videoViewCount") not in (None, 0):
+    """Maps Apify's post-type fields to our content_type vocabulary. Verified
+    against live output: Reels come back as type="Video", productType="clips"
+    (not e.g. an isVideo boolean); regular carousels are type="Sidecar",
+    productType="carousel_container"; single photos are type="Image",
+    productType="feed"."""
+    raw_type = (item.get("type") or "").lower()
+    product_type = (item.get("productType") or "").lower()
+    if raw_type == "video" or "clip" in product_type or "reel" in product_type \
+            or item.get("videoPlayCount") or item.get("videoViewCount"):
         return "reel"
-    if "carousel" in raw_type or "sidecar" in raw_type or item.get("childPosts"):
+    if raw_type == "sidecar" or "carousel" in product_type or item.get("childPosts"):
         return "carousel"
-    if item.get("isVideo"):
-        return "reel"
     return "photo"
 
 
@@ -118,11 +144,17 @@ def first_line(text, max_len=140):
     return line[:max_len]
 
 
-def extract_hashtags(caption):
+def extract_hashtags(item):
+    """The actor already returns a parsed `hashtags` list (no # prefix) on post
+    items -- prefer that over regex-parsing the caption ourselves."""
+    tags = item.get("hashtags")
+    if tags:
+        return ",".join(f"#{t}" for t in tags)
+    caption = item.get("caption") or item.get("text")
     if not caption:
         return None
-    tags = re.findall(r"#(\w+)", caption)
-    return ",".join(f"#{t}" for t in tags) if tags else None
+    found = re.findall(r"#(\w+)", caption)
+    return ",".join(f"#{t}" for t in found) if found else None
 
 
 def normalize_profile_item(item):
@@ -154,7 +186,7 @@ def normalize_post_item(item):
         "title": first_line(caption) or "(no caption)",
         "url": item.get("url"),
         "posted_date": (item.get("timestamp") or "")[:10] or None,
-        "hashtags": extract_hashtags(caption),
+        "hashtags": extract_hashtags(item),
         "likes": likes,
         "comments": comments,
         "shares": 0,   # not publicly exposed by Instagram
@@ -229,43 +261,55 @@ def upsert_post(db, producer_id, post):
 # Apify calls
 # ---------------------------------------------------------------------------
 
-def discover_usernames(client, hashtags, limit):
-    run_input = {
-        "hashtags": hashtags,
-        "resultsType": "posts",
-        "resultsLimit": max(limit * 3, 50),  # over-fetch; many will be filtered out
-    }
-    run = client.actor(INSTAGRAM_SCRAPER_ACTOR).call(run_input=run_input)
+def discover_usernames(token, hashtags, limit):
+    """Pulls each hashtag's explore page directly (directUrls to
+    instagram.com/explore/tags/<tag>/) and collects poster usernames from the
+    returned posts as discovery candidates. NOTE: the actor's documented
+    `search` + `searchType: hashtag` input was tested live and returned
+    "no_items" for both a niche tag and a huge one (#sourdough) -- it appears
+    non-functional right now, so this uses the directUrls form instead, which
+    was verified working against real data."""
     usernames = []
     seen = set()
-    for item in client.dataset(run["defaultDatasetId"]).iterate_items():
-        username = item.get("ownerUsername") or item.get("username")
-        if username and username not in seen:
-            seen.add(username)
-            usernames.append(username)
+    per_hashtag_limit = max(20, (limit * 2) // max(len(hashtags), 1))
+    for hashtag in hashtags:
         if len(usernames) >= limit:
             break
+        run_input = {
+            "directUrls": [f"https://www.instagram.com/explore/tags/{hashtag}/"],
+            "resultsType": "posts",
+            "resultsLimit": per_hashtag_limit,
+        }
+        try:
+            items = call_actor_sync(token, run_input)
+        except RuntimeError as e:
+            print(f"  discovery for #{hashtag} failed: {e}")
+            continue
+        for item in items:
+            username = item.get("ownerUsername") or item.get("username")
+            if username and username not in seen:
+                seen.add(username)
+                usernames.append(username)
+            if len(usernames) >= limit:
+                break
     return usernames
 
 
-def fetch_profile_and_posts(client, username, posts_per_account):
+def fetch_profile_and_posts(token, username, posts_per_account):
     profile_url = f"https://www.instagram.com/{username}/"
-    run_input = {
+
+    details = call_actor_sync(token, {
         "directUrls": [profile_url],
         "resultsType": "details",
         "resultsLimit": 1,
-    }
-    run = client.actor(INSTAGRAM_SCRAPER_ACTOR).call(run_input=run_input)
-    details = list(client.dataset(run["defaultDatasetId"]).iterate_items())
+    })
     profile_item = details[0] if details else {"username": username}
 
-    posts_input = {
+    post_items = call_actor_sync(token, {
         "directUrls": [profile_url],
         "resultsType": "posts",
         "resultsLimit": posts_per_account,
-    }
-    posts_run = client.actor(INSTAGRAM_SCRAPER_ACTOR).call(run_input=posts_input)
-    post_items = list(client.dataset(posts_run["defaultDatasetId"]).iterate_items())
+    })
     return profile_item, post_items
 
 
@@ -291,14 +335,20 @@ def run_dry_run(db):
 
 
 def run_live(db, hashtags, usernames, limit_accounts, posts_per_account):
-    client = get_client()
-    all_usernames = list(dict.fromkeys(usernames + discover_usernames(client, hashtags, limit_accounts)))
-    all_usernames = all_usernames[:limit_accounts]
+    token = get_token()
+    print(f"Discovering candidate accounts from hashtags: {', '.join(hashtags)} ...")
+    discovered = discover_usernames(token, hashtags, limit_accounts)
+    all_usernames = list(dict.fromkeys(usernames + discovered))[:limit_accounts]
+    print(f"Found {len(all_usernames)} candidate accounts.\n")
 
     added_producers, added_posts, flagged = 0, 0, 0
     for username in all_usernames:
         print(f"Fetching @{username} ...")
-        profile_item, post_items = fetch_profile_and_posts(client, username, posts_per_account)
+        try:
+            profile_item, post_items = fetch_profile_and_posts(token, username, posts_per_account)
+        except RuntimeError as e:
+            print(f"  skipped @{username}: {e}")
+            continue
         profile = normalize_profile_item(profile_item)
         if not profile["handle"]:
             print(f"  skipped @{username}: no handle resolved")
