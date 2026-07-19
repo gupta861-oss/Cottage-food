@@ -71,6 +71,43 @@ apify_ingest.py` (below): pull real posts from real cottage food bakery
 Instagram accounts, so `Recommendations` reflects what's actually working
 rather than what a handful of hand-picked examples suggest.
 
+## The real dataset: `data/cottage_bakery_dataset.json`
+
+This is the actual gathered data, checked into git so it survives independent
+of the gitignored `instance/cottage_food.db` and doesn't need to be re-scraped
+(or re-paid-for) to pick this project back up later.
+
+**Current snapshot: 44 real cottage-food bakery Instagram accounts, 500
+posts**, pulled via `scripts/apify_ingest.py` and then manually reviewed —
+26 accounts that hashtag discovery pulled in but weren't actual bakeries were
+removed (a farmers market, an MSU extension office, a public library, two
+web-design agencies, a bookkeeping service, a food blog, a ghost kitchen, and
+several tool/directory/consulting businesses *for* cottage bakers rather than
+bakeries themselves), and several real bakeries the bio-keyword filter had
+wrongly flagged (phrasing like "home based bakery" instead of "home bakery")
+were confirmed. `needs_review=0` on every remaining row reflects that review,
+not just the automated heuristic.
+
+Early signal already visible in the raw numbers: carousels average ~12%
+engagement vs. ~10% for reels and ~6% for single photos. Hook/format/trend_tag
+labels aren't filled in yet — that's a separate qualitative pass (see below).
+
+**Reload this dataset** (e.g. on a fresh checkout, or after experimenting
+locally) instead of re-scraping:
+```bash
+python scripts/load_dataset.py
+```
+
+**Re-export** after you scrape more data and/or do manual review/cleanup, to
+persist it back to git:
+```bash
+python scripts/export_dataset.py
+git add data/cottage_bakery_dataset.json
+```
+Both scripts round-trip every column losslessly (including `hook`/
+`format_style`/`trend_tag`/`is_viral`, once a classification pass fills those
+in) via `upsert_producer`/`upsert_post` in `apify_ingest.py`.
+
 ## Building a real dataset: `scripts/apify_ingest.py`
 
 Instagram's Terms of Service prohibit automated scraping, and a self-built
@@ -98,33 +135,37 @@ python scripts/apify_ingest.py --limit-accounts 70 --posts-per-account 15
 ```
 This discovers candidate accounts via cottage-food-specific hashtags
 (`#cottagefoodlaw`, `#cottagebakery`, `#homebakerylife`, etc. — see
-`DEFAULT_HASHTAGS` in the script to adjust), pulls each account's profile and
-recent posts, and upserts them into the same `producers`/`posts` tables the
-app already uses — safe to re-run any time to refresh the dataset.
+`DEFAULT_HASHTAGS` in the script to adjust) by pulling each hashtag's explore
+page directly, pulls each candidate account's profile and recent posts, and
+upserts them into the same `producers`/`posts` tables the app already uses —
+safe to re-run any time to refresh the dataset. (Earlier iteration used the
+actor's documented `search`+`searchType: hashtag` input; that returned empty
+results in live testing against both niche and huge hashtags, so discovery
+uses direct hashtag-explore URLs instead, which were verified working.)
 
-Cost: Apify's official Instagram Scraper bills ~$1.50 per 1,000 posts. A
-70-account pull at 15 posts each is ~1,050 posts, roughly **$1.60**, within
-Apify's $5/month free tier.
+Cost: Apify's official Instagram Scraper bills ~$0.0023 per result (~$2.30 per
+1,000). A 70-account pull at 15 posts each plus discovery overhead ran about
+**$3** in practice.
 
 **Two things worth knowing before you run a big pull:**
 - **`needs_review` flag**: accounts get kept even if their bio doesn't clearly
   match cottage-food signal keywords, but flagged `needs_review=1` on the
-  `producers` row — the hashtag discovery step will catch some commercial
-  bakeries and general baking influencers, and the bio filter is a heuristic,
-  not ML. Check the flagged rows in the `Producers` view before trusting the
-  count.
+  `producers` row. In practice, discovery pulls in real noise this way (tools,
+  farmers markets, institutions, marketing agencies, consultants who target
+  cottage bakers rather than being one) and the bio-keyword filter also
+  produces false negatives (real bakeries phrased differently than the
+  keyword list expects) — review the flagged rows in the `Producers` view (or
+  have Claude review bios in bulk, as was done for the current dataset —
+  see `data/cottage_bakery_dataset.json` above) rather than trusting the
+  automated count.
 - **Scraped posts arrive unlabeled**: Instagram's public data gives you real
-  engagement numbers (likes, comments, views on Reels) but not *why* a post
-  worked — the `hook`/`format_style`/`trend_tag` fields stay empty until
-  someone reviews the top-performing posts and codes them. That qualitative
-  pass is what actually turns raw numbers into templates; do it via the
-  `Posts & Reels` view sorted by engagement, or ask Claude to review a batch
-  and propose labels.
-- **Sandboxed/restricted environments**: if you're running this from an
-  environment with a locked-down network egress policy (as this session's
-  environment was when this script was built — `api.apify.com` was blocked
-  outright), run it from an unrestricted machine instead, or have your
-  environment's network policy updated to allow that host.
+  engagement numbers (likes, comments, views on Reels via `videoPlayCount` —
+  note `videoViewCount` is always null in this actor's output) but not *why*
+  a post worked — the `hook`/`format_style`/`trend_tag` fields stay empty
+  until someone reviews the top-performing posts and codes them. That
+  qualitative pass is what actually turns raw numbers into templates; do it
+  via the `Posts & Reels` view sorted by engagement, or ask Claude to review
+  a batch and propose labels.
 
 ## Running it
 
@@ -133,29 +174,35 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Then open http://localhost:5000 — the database is created and seeded
-automatically on first request (SQLite file at `instance/cottage_food.db`,
-git-ignored).
+Then open http://localhost:5000 — on first request the database is created,
+seeded with the cold-start benchmark data (`seed.py`), and layered with the
+real gathered dataset (`data/cottage_bakery_dataset.json`, if present) —
+SQLite file at `instance/cottage_food.db`, git-ignored, safe to delete any
+time since everything that matters is reproducible from tracked files.
 
-To wipe and reseed from scratch:
+To wipe and rebuild from scratch:
 
 ```bash
 export FLASK_APP=app.py
-flask init-db      # drops and recreates all tables
-flask seed-db       # repopulates with the starter data in seed.py
+flask init-db        # drops and recreates all tables
+flask seed-db        # repopulates with the cold-start benchmark data in seed.py
+flask load-dataset    # loads the real dataset from data/cottage_bakery_dataset.json
 ```
 
 ## Project layout
 
 ```
-app.py                      Flask app: routes, DB access, recommendation engine
-schema.sql                  SQLite schema (producers, posts, trends, templates, content_ideas)
-seed.py                     Cold-start data (baking-influencer benchmarks + trends + templates)
-templates/                  Jinja2 HTML views
-static/style.css            Styling
-scripts/apify_ingest.py     Real Instagram data pipeline (see above)
-scripts/fixtures/           Mock Apify response used by --dry-run
-.env.example                Template for APIFY_API_TOKEN (copy to .env, gitignored)
+app.py                       Flask app: routes, DB access, recommendation engine
+schema.sql                   SQLite schema (producers, posts, trends, templates, content_ideas)
+seed.py                      Cold-start data (baking-influencer benchmarks + trends + templates)
+templates/                   Jinja2 HTML views
+static/style.css             Styling
+scripts/apify_ingest.py      Real Instagram data pipeline (see above)
+scripts/export_dataset.py    DB -> data/cottage_bakery_dataset.json (persist gathered data to git)
+scripts/load_dataset.py      data/cottage_bakery_dataset.json -> DB (reconstitute without re-scraping)
+scripts/fixtures/            Mock Apify response used by --dry-run
+data/cottage_bakery_dataset.json   The actual gathered dataset (see above), git-tracked
+.env.example                 Template for APIFY_API_TOKEN (copy to .env, gitignored)
 ```
 
 ## Extending it

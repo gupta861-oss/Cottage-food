@@ -213,17 +213,32 @@ def get_db():
 
 
 def upsert_producer(db, profile):
+    """Covers every producer column so a full round-trip (export_dataset.py ->
+    load_dataset.py) is lossless, including fields a live scrape never sets
+    (location, niche, avg_engagement_rate, posting_frequency_per_week,
+    standout_factor -- Instagram's public data doesn't give us these; they're
+    only ever set by manual edits in the app) via setdefault, so existing
+    callers that don't pass them keep working unchanged."""
     if not profile.get("handle"):
         raise ValueError("Cannot upsert a producer with no handle")
+    profile = dict(profile)
+    for key in ("location", "niche", "avg_engagement_rate",
+                "posting_frequency_per_week", "standout_factor"):
+        profile.setdefault(key, None)
     db.execute(
-        """INSERT INTO producers (name, platform, handle, url, follower_count,
-               content_style, source, needs_review, notes)
-           VALUES (:name, :platform, :handle, :url, :follower_count,
-               :content_style, :source, :needs_review, :notes)
+        """INSERT INTO producers (name, platform, handle, url, location, niche,
+               follower_count, avg_engagement_rate, posting_frequency_per_week,
+               content_style, standout_factor, source, needs_review, notes)
+           VALUES (:name, :platform, :handle, :url, :location, :niche,
+               :follower_count, :avg_engagement_rate, :posting_frequency_per_week,
+               :content_style, :standout_factor, :source, :needs_review, :notes)
            ON CONFLICT(platform, handle) DO UPDATE SET
-               name=excluded.name, url=excluded.url,
-               follower_count=excluded.follower_count,
+               name=excluded.name, url=excluded.url, location=excluded.location,
+               niche=excluded.niche, follower_count=excluded.follower_count,
+               avg_engagement_rate=excluded.avg_engagement_rate,
+               posting_frequency_per_week=excluded.posting_frequency_per_week,
                content_style=excluded.content_style,
+               standout_factor=excluded.standout_factor,
                needs_review=excluded.needs_review, notes=excluded.notes""",
         profile,
     )
@@ -235,26 +250,32 @@ def upsert_producer(db, profile):
 
 
 def upsert_post(db, producer_id, post):
+    """Covers every post column (including hook/format_style/trend_tag/is_viral,
+    which a live scrape never sets -- only the manual classification pass does)
+    via setdefault, so a full export/load round-trip preserves that work
+    instead of silently dropping it."""
     post = dict(post, producer_id=producer_id)
+    for key, default in (("hook", None), ("format_style", None),
+                          ("trend_tag", None), ("is_viral", 0)):
+        post.setdefault(key, default)
+    columns = ("producer_id, platform, content_type, title, url, posted_date, "
+               "hook, format_style, trend_tag, hashtags, likes, comments, "
+               "shares, saves, views, is_viral, why_it_worked")
+    placeholders = (":producer_id, :platform, :content_type, :title, :url, :posted_date, "
+                    ":hook, :format_style, :trend_tag, :hashtags, :likes, :comments, "
+                    ":shares, :saves, :views, :is_viral, :why_it_worked")
     if post.get("url"):
         db.execute(
-            """INSERT INTO posts (producer_id, platform, content_type, title, url,
-                   posted_date, hashtags, likes, comments, shares, saves, views, why_it_worked)
-               VALUES (:producer_id, :platform, :content_type, :title, :url,
-                   :posted_date, :hashtags, :likes, :comments, :shares, :saves, :views, :why_it_worked)
+            f"""INSERT INTO posts ({columns}) VALUES ({placeholders})
                ON CONFLICT(url) DO UPDATE SET
                    likes=excluded.likes, comments=excluded.comments,
-                   views=excluded.views, title=excluded.title""",
+                   views=excluded.views, title=excluded.title,
+                   hook=excluded.hook, format_style=excluded.format_style,
+                   trend_tag=excluded.trend_tag, is_viral=excluded.is_viral""",
             post,
         )
     else:
-        db.execute(
-            """INSERT INTO posts (producer_id, platform, content_type, title, url,
-                   posted_date, hashtags, likes, comments, shares, saves, views, why_it_worked)
-               VALUES (:producer_id, :platform, :content_type, :title, :url,
-                   :posted_date, :hashtags, :likes, :comments, :shares, :saves, :views, :why_it_worked)""",
-            post,
-        )
+        db.execute(f"INSERT INTO posts ({columns}) VALUES ({placeholders})", post)
 
 
 # ---------------------------------------------------------------------------

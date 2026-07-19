@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import sys
 from datetime import date
 
 from flask import Flask, g, redirect, render_template, request, url_for
@@ -54,6 +55,31 @@ def seed_db_command():
     print("Database seeded.")
 
 
+DATASET_PATH = os.path.join(os.path.dirname(__file__), "data", "cottage_bakery_dataset.json")
+
+
+def _load_real_dataset():
+    """Loads data/cottage_bakery_dataset.json (the real, gathered dataset --
+    see scripts/export_dataset.py / scripts/load_dataset.py) if it exists."""
+    if not os.path.exists(DATASET_PATH):
+        return False
+    scripts_dir = os.path.join(os.path.dirname(__file__), "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    import load_dataset
+    load_dataset.load()
+    return True
+
+
+@app.cli.command("load-dataset")
+def load_dataset_command():
+    """Load the real gathered dataset from data/cottage_bakery_dataset.json."""
+    if _load_real_dataset():
+        print("Dataset loaded.")
+    else:
+        print(f"No dataset file at {DATASET_PATH} -- nothing to load.")
+
+
 def get_db_standalone():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     db = sqlite3.connect(DB_PATH)
@@ -63,7 +89,10 @@ def get_db_standalone():
 
 
 def ensure_db_ready():
-    """First-run convenience: create + seed the db if it doesn't exist yet."""
+    """First-run convenience: create + seed the db if it doesn't exist yet, then
+    layer in the real gathered dataset (data/cottage_bakery_dataset.json) on
+    top if one has been committed -- so a fresh clone shows real data, not
+    just the cold-start benchmarks, without an extra manual step."""
     if not os.path.exists(DB_PATH):
         init_db()
         import seed
@@ -71,6 +100,7 @@ def ensure_db_ready():
         seed.run(db)
         db.commit()
         db.close()
+        _load_real_dataset()
 
 
 # ---------------------------------------------------------------------------
